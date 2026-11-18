@@ -35,4 +35,4 @@ pub use generated::runtime::*;
 pub use naming::CodexHarness;
 pub use nexus::{ConfigurationReading, HarnessNexus, Locking};
 pub use store::{Familial, Opening, Store};
-pub use watching::{DirectoryWatch, Replacing, SessionsWatch, Settling, Watching};
+pub use watching::{DirectoryWatch, Replacing, SessionsWatch, Watching};

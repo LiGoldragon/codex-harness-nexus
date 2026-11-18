@@ -20,7 +20,7 @@ use notify::{RecommendedWatcher, RecursiveMode, Watcher as _};
 use signal_codex_harness_nexus::{Diagnostic, ReportFailure};
 
 use crate::generated::actor::{
-    Placement, PlacementPositioning as _, PlacementState as _, Reach, ReachCoverage as _,
+    Placement, PlacementPositioning as _, PlacementState as _, Reach, ReachCoverage as _, Settling,
     WatchChangeKind, WatchConsequence, WatchEvent, WatchFailure, WatchGeneration, WatchResult,
     WatchWord,
 };
@@ -212,28 +212,6 @@ impl Replacing for SessionsWatch {
     }
 }
 
-pub trait Settling {
-    /// Moves each directory's watch to where it rests now, watching the new
-    /// place before the old is let go, and looks again after each move, so
-    /// a component made while the watch moved is not missed. A directory
-    /// there that cannot be watched keeps its watch where it was, and is
-    /// told.
-    fn settle(&mut self) -> Vec<UnwatchableDirectory>;
-
-    /// A watched directory removed or moved away no longer holds its
-    /// watch: it is let go, every directory resting on it rests nowhere,
-    /// and settling places each anew, so one made again at once is still
-    /// told as come to be there.
-    fn forget(&mut self, event: &WatchEvent);
-
-    /// The files this word says were written inside a configured
-    /// directory that is there.
-    fn written(&self, event: &WatchEvent) -> Vec<FilePath>;
-
-    /// The configured directories not yet there.
-    fn awaited(&self) -> AwaitedDirectories;
-}
-
 impl Settling for DirectoryWatch {
     fn settle(&mut self) -> Vec<UnwatchableDirectory> {
         let mut failures: Vec<UnwatchableDirectory> = vec![];
@@ -307,7 +285,7 @@ impl Settling for DirectoryWatch {
         }
     }
 
-    fn forget(&mut self, event: &WatchEvent) {
+    fn forget(&mut self, event: WatchEvent) {
         let gone = matches!(
             &event.watch_change_kind,
             WatchChangeKind::Removed | WatchChangeKind::RenamedFrom
@@ -332,7 +310,7 @@ impl Settling for DirectoryWatch {
         }
     }
 
-    fn written(&self, event: &WatchEvent) -> Vec<FilePath> {
+    fn written(&self, event: WatchEvent) -> Vec<FilePath> {
         match &event.watch_change_kind {
             WatchChangeKind::CreatedFolder => vec![],
             WatchChangeKind::Created | WatchChangeKind::Modified => event
@@ -401,11 +379,11 @@ impl<Translator> Watching for HarnessNexus<Translator> {
             }
         };
         let before = watch.awaited();
-        watch.forget(&event);
+        watch.forget(event.clone());
         // A directory whose watch was lost is awaited until it is placed
         // anew, so one made again at once is told as come to be there.
         let unplaced = watch.awaited();
-        let written = watch.written(&event);
+        let written = watch.written(event);
         let failures = watch
             .settle()
             .into_iter()

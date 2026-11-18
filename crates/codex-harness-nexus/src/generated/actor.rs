@@ -104,6 +104,19 @@ pub trait ReachCoverage {
     fn reaches(&self, input: Reach) -> bool;
 }
 #[rustfmt::skip]
+pub trait Settling {
+    fn settle(
+        &mut self,
+    ) -> std::vec::Vec<meta_signal_codex_harness_nexus::UnwatchableDirectory>;
+    fn forget(&mut self, input: WatchEvent);
+    fn written(&self, input: WatchEvent) -> std::vec::Vec<harness::FilePath>;
+    fn awaited(&self) -> meta_signal_codex_harness_nexus::AwaitedDirectories;
+}
+#[rustfmt::skip]
+pub trait PublicOpening {
+    fn open_public(&self) -> std::result::Result<Opened, ListenerFailure>;
+}
+#[rustfmt::skip]
 pub trait NexusRuntime {
     fn read_configuration(
         &self,

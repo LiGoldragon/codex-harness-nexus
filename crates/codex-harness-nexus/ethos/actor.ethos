@@ -1,7 +1,8 @@
 Library
 [ harness:[ FilePath ]
   meta_signal_codex_harness_nexus:[ Configuration ConfigurationReadout
-                                    ConfigurationRefusal Set SessionsDirectories ]
+                                    AwaitedDirectories ConfigurationRefusal Set
+                                    SessionsDirectories UnwatchableDirectory ]
   signal_codex_harness_nexus:Diagnostic ]
 [ WatchGeneration.Integer
   WatchChangeKind.[ CreatedFolder Created Removed RenamedFrom Modified Other ]
@@ -19,6 +20,11 @@ Library
   PlacementPositioning.[ placed.[ Placement ] ]
   PlacementState.[ arrived.[ Boolean ] reach.[ Reach ] ]
   ReachCoverage.[ reaches.{ [ Reach ] [ Boolean ] } ]
+  Settling.[ settle!{ [] [ Vector<UnwatchableDirectory> ] }
+              forget!{ [ WatchEvent ] [] }
+              written.{ [ WatchEvent ] [ Vector<FilePath> ] }
+              awaited.[ AwaitedDirectories ] ]
+  PublicOpening.[ open_public.[ Result<Opened ListenerFailure> ] ]
   NexusRuntime.[ read_configuration.[ Result<ConfigurationReadout Diagnostic> ]
                   configure!{ [ ConfigurationSetting ]
                               [ Result<Configuration ConfigurationRefusal> ] }

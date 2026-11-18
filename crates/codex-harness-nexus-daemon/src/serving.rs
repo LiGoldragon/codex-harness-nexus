@@ -9,7 +9,8 @@ use std::time::Duration;
 
 pub use codex_harness_nexus::ListenerFailure;
 use codex_harness_nexus::{
-    CodexHarness, HarnessNexus, Opening as _, SessionsWatch, Store, WatchGeneration, WatchWord,
+    CodexHarness, HarnessNexus, Opened, Opening as _, PublicOpening, SessionsWatch, Store,
+    WatchGeneration, WatchWord,
 };
 use meta_signal_codex_harness_nexus as meta;
 use nexus_exchange::{MemoryPlacing as _, Named as _, ValidAdmission};
@@ -47,10 +48,28 @@ impl TransportBounded for Bounds {
 /// socket is open, and the words of its watch, which one thread follows.
 pub struct Serving {
     pub nexus: HarnessNexus<PairedTranslator>,
-    pub listeners: Listeners<CodexHarness>,
+    pub listeners: Arc<Listeners<CodexHarness>>,
     pub bounds: Arc<Bounds>,
     pub opened: OnceLock<()>,
     pub words: Mutex<Receiver<WatchWord>>,
+}
+
+/// The native listener capability the core actor invokes when readiness is
+/// reached. It holds the same listeners the daemon's acceptors use.
+#[derive(Clone)]
+pub struct PublicListener {
+    pub listeners: Arc<Listeners<CodexHarness>>,
+}
+
+impl PublicOpening for PublicListener {
+    fn open_public(&self) -> Result<Opened, ListenerFailure> {
+        let listener = self
+            .listeners
+            .stage_public()
+            .map_err(|error| ListenerFailure::Public(error.to_string()))?;
+        self.listeners.publish_public(listener);
+        Ok(Opened(true))
+    }
 }
 
 /// The served Nexus, shared by the accepting threads and every connection's
@@ -95,7 +114,9 @@ impl DaemonStarting for Daemon {
         admission: ValidAdmission,
         translator: PeerIdentity,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let listeners = Listeners::<CodexHarness>::bind(place, admission, translator)?;
+        let listeners = Arc::new(Listeners::<CodexHarness>::bind(
+            place, admission, translator,
+        )?);
         let lane = EmissionLane::from(listeners.paths().translator.clone());
         let store =
             Store::open(&place.memory_path::<CodexHarness>()).map_err(|diagnostic| diagnostic.0)?;
