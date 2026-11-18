@@ -1,0 +1,5 @@
+Emission
+[ harness:[ Session FilePath ] ]
+[ FindRollout.Session ]
+[ RolloutFinding.[ Found.FilePath Unfound ] ]
+[]
