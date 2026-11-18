@@ -79,7 +79,7 @@
             fmt = pkgs.runCommand "codex-harness-nexus-fmt" { nativeBuildInputs = [ toolchain ]; } ''
               cd ${./crates}
               rustfmt --edition 2024 --check \
-                codex-harness-nexus/src/{lib,folded,naming,nexus,store,views,watching}.rs \
+                codex-harness-nexus/src/{lib,diagnosing,folded,naming,nexus,store,views,watching}.rs \
                 codex-harness-translator/src/{lib,emitting,rollout,translating}.rs \
                 codex-harness-translator/src/bin/{codex-harness,codex-harness-meta,codex-harness-translator,codex-harness-pair}.rs \
                 codex-harness-nexus-daemon/src/{lib,bootstrap,emitting,main,serving,waking}.rs \

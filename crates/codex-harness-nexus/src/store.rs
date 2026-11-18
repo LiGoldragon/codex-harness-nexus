@@ -12,6 +12,7 @@ use meta_signal_codex_harness_nexus::Configuration;
 use signal::Following;
 use signal_codex_harness_nexus::{Changed, Diagnostic};
 
+use crate::diagnosing::Diagnosing as _;
 use crate::generated::folding::SessionChange;
 use crate::generated::memory::{MalformedRecord, SessionRecord, StoredConfiguration};
 use crate::generated::runtime::{Planned, Remembering, Sessional, Settable};
@@ -89,14 +90,10 @@ pub trait Opening: Sized {
     fn open(path: &Path) -> Result<Self, Diagnostic>;
 }
 
-fn diagnostic(error: impl std::fmt::Display) -> Diagnostic {
-    Diagnostic(error.to_string())
-}
-
 impl Opening for Store {
     fn open(path: &Path) -> Result<Self, Diagnostic> {
         if let Some(directory) = path.parent() {
-            std::fs::create_dir_all(directory).map_err(diagnostic)?;
+            std::fs::create_dir_all(directory).map_err(|error| error.diagnostic())?;
         }
         let mut engine = Engine::open(
             EngineOpen::new(path, SCHEMA_VERSION)
@@ -104,16 +101,16 @@ impl Opening for Store {
                 .with_family(&MalformedRecord::descriptor())
                 .with_family(&StoredConfiguration::descriptor()),
         )
-        .map_err(diagnostic)?;
+        .map_err(|error| error.diagnostic())?;
         let sessions = engine
             .register_table(SessionRecord::descriptor())
-            .map_err(diagnostic)?;
+            .map_err(|error| error.diagnostic())?;
         let malformed = engine
             .register_table(MalformedRecord::descriptor())
-            .map_err(diagnostic)?;
+            .map_err(|error| error.diagnostic())?;
         let configuration = engine
             .register_table(StoredConfiguration::descriptor())
-            .map_err(diagnostic)?;
+            .map_err(|error| error.diagnostic())?;
         Ok(Self {
             engine,
             sessions,
@@ -131,7 +128,7 @@ impl Remembering for Store {
                 self.sessions,
                 RecordKey::new(input.session().0),
             ))
-            .map_err(diagnostic)?;
+            .map_err(|error| error.diagnostic())?;
         match snapshot.records() {
             [] => Ok(None),
             [record] => Ok(Some(record.clone())),
@@ -146,7 +143,7 @@ impl Remembering for Store {
         Ok(self
             .engine
             .match_records(QueryPlan::all(self.sessions))
-            .map_err(diagnostic)?
+            .map_err(|error| error.diagnostic())?
             .records()
             .to_vec())
     }
@@ -161,7 +158,9 @@ impl Remembering for Store {
         for record in plan.malformed_record_vector {
             commit = commit.assert(self.malformed, record);
         }
-        self.engine.commit_atomic(commit).map_err(diagnostic)?;
+        self.engine
+            .commit_atomic(commit)
+            .map_err(|error| error.diagnostic())?;
         Ok(plan.changed_vector)
     }
 
@@ -169,7 +168,7 @@ impl Remembering for Store {
         let snapshot = self
             .engine
             .match_records(QueryPlan::all(self.configuration))
-            .map_err(diagnostic)?;
+            .map_err(|error| error.diagnostic())?;
         match snapshot.records() {
             [] => Ok(Configuration {
                 text_budget_option: None,
@@ -191,7 +190,7 @@ impl Remembering for Store {
         let present = !self
             .engine
             .match_records(QueryPlan::all(self.configuration))
-            .map_err(diagnostic)?
+            .map_err(|error| error.diagnostic())?
             .records()
             .is_empty();
         let configuration = Configuration::after(self.configuration()?, input.setting());
@@ -204,7 +203,9 @@ impl Remembering for Store {
         } else {
             commit.assert(self.configuration, stored)
         };
-        self.engine.commit_atomic(commit).map_err(diagnostic)?;
+        self.engine
+            .commit_atomic(commit)
+            .map_err(|error| error.diagnostic())?;
         Ok(configuration)
     }
 }

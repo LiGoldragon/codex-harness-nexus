@@ -47,14 +47,16 @@ impl Readying for Configuration {
     }
 }
 
-fn unrecorded(diagnostic: Diagnostic) -> ReportFailure {
-    ReportFailure::Unrecorded(diagnostic)
+/// A mutex held through a panic elsewhere: its value is still the
+/// Nexus's, so the guard is taken back from the poisoning.
+pub trait Locking<Value> {
+    fn locked(&self) -> MutexGuard<'_, Value>;
 }
 
-fn locked<Value>(mutex: &Mutex<Value>) -> MutexGuard<'_, Value> {
-    mutex
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+impl<Value> Locking<Value> for Mutex<Value> {
+    fn locked(&self) -> MutexGuard<'_, Value> {
+        self.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 }
 
 impl<Translator> Attempting for HarnessNexus<Translator>
@@ -68,13 +70,16 @@ where
         let ready = self
             .store
             .configuration()
-            .map_err(unrecorded)?
+            .map_err(ReportFailure::Unrecorded)?
             .ready()
             .ok_or(ReportFailure::Unconfigured)?;
         match input.operation() {
             Operation::Reporting(hook) => {
                 let session = hook.session();
-                let record = self.store.recall(session.clone()).map_err(unrecorded)?;
+                let record = self
+                    .store
+                    .recall(session.clone())
+                    .map_err(ReportFailure::Unrecorded)?;
                 let flow_id = match (&record, &hook) {
                     (Some(record), _) => record.observed.flow_id.clone(),
                     (None, Hook::SessionStart(_)) => match (ClaimIdentity_Data {
@@ -120,7 +125,7 @@ where
                 let record = self
                     .store
                     .recall_all()
-                    .map_err(unrecorded)?
+                    .map_err(ReportFailure::Unrecorded)?
                     .into_iter()
                     .find(|record| record.observed.flow_id == watch.flow_id)
                     .ok_or_else(|| {
@@ -140,11 +145,13 @@ where
                             byte_offset: read.byte_offset,
                         })),
                     })),
-                    RolloutReading_Data::Unreadable(diagnostic) => Err(unrecorded(diagnostic)),
+                    RolloutReading_Data::Unreadable(diagnostic) => {
+                        Err(ReportFailure::Unrecorded(diagnostic))
+                    }
                 }
             }
             Operation::Discovering(path) => {
-                let records = self.store.recall_all().map_err(unrecorded)?;
+                let records = self.store.recall_all().map_err(ReportFailure::Unrecorded)?;
                 let attached = |record: SessionRecord| {
                     Outcome::Discovered(Some(EventBatch {
                         session: record.session,
@@ -180,10 +187,14 @@ where
     }
 }
 
-fn fold_refused(refusal: FoldRefusal) -> ReportFailure {
-    match refusal {
-        FoldRefusal::Unregistered(session) => ReportFailure::Unregistered(session),
-        refusal => ReportFailure::Unrecorded(Diagnostic(format!("{refusal:?}"))),
+/// A fold refused for a session never registered is told as such; any
+/// other refusal is a Memory that could not be recorded.
+impl From<FoldRefusal> for ReportFailure {
+    fn from(refusal: FoldRefusal) -> Self {
+        match refusal {
+            FoldRefusal::Unregistered(session) => ReportFailure::Unregistered(session),
+            refusal => ReportFailure::Unrecorded(Diagnostic(format!("{refusal:?}"))),
+        }
     }
 }
 
@@ -196,7 +207,7 @@ where
 {
     fn perform<N: Operable>(&self, input: N) -> Result<Vec<Changed>, ReportFailure> {
         let changes = {
-            let _serial = locked(&self.serial);
+            let _serial = self.serial.locked();
             // A discovery attaches a rollout; only that is read again at once.
             let (batch, attached) = match self.attempt(input)? {
                 Outcome::Reported(batch) | Outcome::Read(batch) => (batch, None),
@@ -209,9 +220,12 @@ where
                 }
                 Outcome::Discovered(None) => return Ok(vec![]),
             };
-            let record = self.store.recall(batch.session()).map_err(unrecorded)?;
-            let plan = batch.fold(record).map_err(fold_refused)?;
-            let changes = self.store.commit(plan).map_err(unrecorded)?;
+            let record = self
+                .store
+                .recall(batch.session())
+                .map_err(ReportFailure::Unrecorded)?;
+            let plan = batch.fold(record)?;
+            let changes = self.store.commit(plan).map_err(ReportFailure::Unrecorded)?;
             self.publish(changes.clone());
             (changes, attached)
         };
@@ -230,7 +244,7 @@ where
 /// first known, and each committed change is published to it.
 impl<Translator> Observing for HarnessNexus<Translator> {
     fn publish(&self, changes: Vec<Changed>) {
-        if let Some(publisher) = locked(&self.observations).as_ref() {
+        if let Some(publisher) = self.observations.locked().as_ref() {
             for change in changes {
                 publisher.publish(change);
             }
@@ -243,15 +257,15 @@ impl<Translator> Observing for HarnessNexus<Translator> {
         let capacity = self
             .store
             .configuration()
-            .map_err(unrecorded)?
+            .map_err(ReportFailure::Unrecorded)?
             .capacity_option
             .ok_or(ReportFailure::Unconfigured)?;
-        let mut publisher = locked(&self.observations);
+        let mut publisher = self.observations.locked();
         if publisher.is_none() {
             let state = Observations(
                 self.store
                     .recall_all()
-                    .map_err(unrecorded)?
+                    .map_err(ReportFailure::Unrecorded)?
                     .into_iter()
                     .map(|record| record.observed)
                     .collect(),
@@ -279,9 +293,10 @@ where
     }
 
     fn subscribe(&self) -> Result<signal::Stream<Observations, Changed>, Output> {
-        let _serial = locked(&self.serial);
+        let _serial = self.serial.locked();
         self.prepare().map_err(Output::ReportRefused)?;
-        locked(&self.observations)
+        self.observations
+            .locked()
             .as_ref()
             .map(Publishing::open)
             .ok_or(Output::ReportRefused(ReportFailure::Unconfigured))
@@ -293,37 +308,44 @@ impl<Translator> meta_signal_codex_harness_nexus::Answering for HarnessNexus<Tra
     /// its translator's own, answered there and refused here.
     fn configure(&self, set: &Set) -> Result<Set, meta_signal_codex_harness_nexus::Output> {
         use meta_signal_codex_harness_nexus::Output as MetaOutput;
-        let refused = |refusal| Err(MetaOutput::ConfigureRefused(refusal));
         if let Set::TextBudget(_) = set {
-            return refused(ConfigurationRefusal::TranslatorSetting);
+            return Err(MetaOutput::ConfigureRefused(
+                ConfigurationRefusal::TranslatorSetting,
+            ));
         }
         if let Set::SubscriberCapacity(capacity) = set
             && capacity.0 <= 0
         {
-            return refused(ConfigurationRefusal::InvalidCapacity(*capacity));
+            return Err(MetaOutput::ConfigureRefused(
+                ConfigurationRefusal::InvalidCapacity(*capacity),
+            ));
         }
         if let Some(path) = set
             .paths()
             .into_iter()
             .find(|path| !path.0.starts_with('/'))
         {
-            return refused(ConfigurationRefusal::InvalidPath(path));
+            return Err(MetaOutput::ConfigureRefused(
+                ConfigurationRefusal::InvalidPath(path),
+            ));
         }
-        let _serial = locked(&self.serial);
+        let _serial = self.serial.locked();
         if let Err(diagnostic) = self.store.configure(set.clone()) {
-            return refused(ConfigurationRefusal::Unrecorded(
-                meta_signal_codex_harness_nexus::Diagnostic(diagnostic.0),
+            return Err(MetaOutput::ConfigureRefused(
+                ConfigurationRefusal::Unrecorded(meta_signal_codex_harness_nexus::Diagnostic(
+                    diagnostic.0,
+                )),
             ));
         }
         if let Set::SubscriberCapacity(capacity) = set {
-            if let Some(publisher) = locked(&self.observations).as_mut() {
+            if let Some(publisher) = self.observations.locked().as_mut() {
                 let _ = publisher.resize(Capacity(capacity.0));
             }
-            if let Some(publisher) = locked(&self.configurations).as_mut() {
+            if let Some(publisher) = self.configurations.locked().as_mut() {
                 let _ = publisher.resize(Capacity(capacity.0));
             }
         }
-        if let Some(publisher) = locked(&self.configurations).as_ref() {
+        if let Some(publisher) = self.configurations.locked().as_ref() {
             publisher.publish(set.clone());
         }
         Ok(set.clone())
@@ -333,7 +355,7 @@ impl<Translator> meta_signal_codex_harness_nexus::Answering for HarnessNexus<Tra
         &self,
     ) -> Result<signal::Stream<Configuration, Set>, meta_signal_codex_harness_nexus::Output> {
         use meta_signal_codex_harness_nexus::Output as MetaOutput;
-        let _serial = locked(&self.serial);
+        let _serial = self.serial.locked();
         let configuration = self.store.configuration().map_err(|diagnostic| {
             MetaOutput::ConfigureRefused(ConfigurationRefusal::Unrecorded(
                 meta_signal_codex_harness_nexus::Diagnostic(diagnostic.0),
@@ -344,7 +366,7 @@ impl<Translator> meta_signal_codex_harness_nexus::Answering for HarnessNexus<Tra
             .ok_or(MetaOutput::ConfigureRefused(
                 ConfigurationRefusal::CapacityUnset,
             ))?;
-        let mut publisher = locked(&self.configurations);
+        let mut publisher = self.configurations.locked();
         if publisher.is_none() {
             *publisher = Some(
                 Publisher::create(configuration, Capacity(capacity.0)).map_err(|_| {

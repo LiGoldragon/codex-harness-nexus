@@ -15,6 +15,7 @@ mod generated {
     pub mod operation;
     pub mod runtime;
 }
+mod diagnosing;
 mod folded;
 mod naming;
 mod nexus;
@@ -22,6 +23,7 @@ mod store;
 mod views;
 mod watching;
 
+pub use diagnosing::Diagnosing;
 pub use generated::bootstrap::*;
 pub use generated::emission;
 pub use generated::folding::*;
@@ -29,6 +31,6 @@ pub use generated::memory::*;
 pub use generated::operation::*;
 pub use generated::runtime::*;
 pub use naming::CodexHarness;
-pub use nexus::HarnessNexus;
+pub use nexus::{HarnessNexus, Locking};
 pub use store::{Familial, Opening, Store};
 pub use watching::Watcher;

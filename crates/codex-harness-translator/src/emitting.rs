@@ -7,11 +7,11 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::process::Command;
 
-use codex_harness_nexus::Watch;
 use codex_harness_nexus::emission::{
     ClaimIdentity_Data, Emittable, IdentityClaim_Data, RolloutFinding_Data, RolloutIdentity_Data,
     RolloutReading_Data, RolloutReading_Data_Read_Data,
 };
+use codex_harness_nexus::{Diagnosing as _, Watch};
 use flow::FlowId;
 use harness::{FilePath, Observable, Session};
 use signal_codex_harness_nexus::{
@@ -21,17 +21,6 @@ use signal_codex_harness_nexus::{
 
 use crate::generated::rollout::{Interpretable, RowText};
 use crate::translating::CodexHarnessTranslator;
-
-/// A failure as the Nexus is told it: its text.
-pub trait Diagnosing {
-    fn diagnostic(&self) -> Diagnostic;
-}
-
-impl<Failure: std::fmt::Display> Diagnosing for Failure {
-    fn diagnostic(&self) -> Diagnostic {
-        Diagnostic(self.to_string())
-    }
-}
 
 /// Codex's own thread database is not read yet: a session whose hook names
 /// no path waits for its rollout to appear in a sessions directory.

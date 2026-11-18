@@ -58,11 +58,25 @@ pub struct Daemon {
     pub serving: Arc<Serving>,
 }
 
-impl Daemon {
+/// How the daemon starts: bound, then served.
+pub trait DaemonStarting: Sized {
     /// Binds the meta socket in `place` and opens the Memory in its state
     /// directory; the public socket waits for a ready configuration. Every
     /// emission goes to the translator's public socket in the same place.
-    pub fn bind(
+    fn bind(
+        place: &Place,
+        admission: ValidAdmission,
+        translator: PeerIdentity,
+    ) -> Result<Self, Box<dyn std::error::Error>>;
+
+    /// Serves until a listener fails: the meta socket on a thread of its
+    /// own, the public socket's connections on `runtime`. A configuration
+    /// already ready opens the public socket at once.
+    fn serve(self, runtime: tokio::runtime::Handle) -> Result<(), Box<dyn std::error::Error>>;
+}
+
+impl DaemonStarting for Daemon {
+    fn bind(
         place: &Place,
         admission: ValidAdmission,
         translator: PeerIdentity,
@@ -88,10 +102,7 @@ impl Daemon {
         })
     }
 
-    /// Serves until a listener fails: the meta socket on a thread of its
-    /// own, the public socket's connections on `runtime`. A configuration
-    /// already ready opens the public socket at once.
-    pub fn serve(self, runtime: tokio::runtime::Handle) -> Result<(), Box<dyn std::error::Error>> {
+    fn serve(self, runtime: tokio::runtime::Handle) -> Result<(), Box<dyn std::error::Error>> {
         self.open()?;
         let meta = self.clone();
         std::thread::spawn(move || {
@@ -102,11 +113,13 @@ impl Daemon {
                 }
             }
         });
+        // The public socket admits the translator alone, whose authority is
+        // the unit this Nexus's PeerAdmitting names.
         loop {
             let accepted = self.serving.listeners.accept_public(&self)?;
             runtime.spawn(PublicConnection::<Daemon>::serve(
                 accepted.stream,
-                accepted.authority,
+                (),
                 self.clone(),
                 Arc::clone(&self.serving.bounds),
             ));

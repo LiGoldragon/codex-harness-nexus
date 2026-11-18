@@ -6,8 +6,8 @@
 use std::sync::{Arc, MutexGuard};
 
 use codex_harness_nexus::{
-    Awaiting as _, Operation, Performing as _, Readying as _, Remembering as _, Waking as _,
-    Watcher,
+    Awaiting as _, Locking as _, Operation, Performing as _, Readying as _, Remembering as _,
+    Waking as _, Watcher,
 };
 use harness::FilePath;
 use meta_signal_codex_harness_nexus::Set;
@@ -44,9 +44,7 @@ pub trait Supervising {
 
 impl Supervising for Serving {
     fn generation(&self) -> MutexGuard<'_, u64> {
-        self.watch_generation
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.watch_generation.locked()
     }
 
     fn perform_all(&self, operations: Result<Vec<Operation>, ReportFailure>) {

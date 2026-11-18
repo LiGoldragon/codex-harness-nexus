@@ -1,4 +1,4 @@
-use codex_harness_nexus_daemon::{BootstrapReading, Daemon, NexusBootstrap};
+use codex_harness_nexus_daemon::{BootstrapReading, Daemon, DaemonStarting, NexusBootstrap};
 use nexus_exchange::ValidAdmission;
 use shared_translator::placement::{Preparable, validate_place_name};
 

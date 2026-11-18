@@ -138,7 +138,10 @@ impl Emittable<PairedTranslator> for FilePath {
         match translator.carry(Emission::IdentifyRollout(self.clone())) {
             Ok(identity) => identity,
             Err(diagnostic) => {
-                eprintln!("Codex Harness Nexus identified no rollout: {}", diagnostic.0);
+                eprintln!(
+                    "Codex Harness Nexus identified no rollout: {}",
+                    diagnostic.0
+                );
                 RolloutIdentity_Data::Unidentified
             }
         }

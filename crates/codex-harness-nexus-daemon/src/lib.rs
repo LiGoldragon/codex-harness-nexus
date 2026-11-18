@@ -15,5 +15,5 @@ mod waking;
 pub use bootstrap::BootstrapReading;
 pub use codex_harness_nexus::{CodexHarness, NexusBootstrap};
 pub use emitting::{Answered, Carrying, PairedTranslator};
-pub use serving::{Bounds, Daemon, Serving};
+pub use serving::{Bounds, Daemon, DaemonStarting, Serving};
 pub use waking::{ReadyOpening, Supervising, Watching};
