@@ -43,32 +43,22 @@ pub struct StoredConfiguration {
     pub configuration: meta_signal_codex_harness_nexus::Configuration,
 }
 #[rustfmt::skip]
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
-pub struct StoreOpener {}
-#[rustfmt::skip]
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
-pub struct StoreFamilies {}
-#[rustfmt::skip]
 pub trait StorePath {
     fn path(&self) -> harness::FilePath;
 }
 #[rustfmt::skip]
 pub trait StoreOpening {
     fn open<N: StorePath>(
-        &self,
         input: N,
-    ) -> std::result::Result<
-        codex_harness_nexus::Store,
-        signal_codex_harness_nexus::Diagnostic,
-    >;
+    ) -> std::result::Result<Self, signal_codex_harness_nexus::Diagnostic>
+    where
+        Self: Sized;
 }
 #[rustfmt::skip]
-pub trait FamilyCatalog {
-    fn session(&self) -> memory_engine::TableDescriptor<SessionRecord>;
-    fn malformed(&self) -> memory_engine::TableDescriptor<MalformedRecord>;
-    fn configuration(&self) -> memory_engine::TableDescriptor<StoredConfiguration>;
+pub trait Familial {
+    fn descriptor() -> memory_engine::TableDescriptor<Self>
+    where
+        Self: Sized;
 }
 #[rustfmt::skip]
 const _: () = {
@@ -77,11 +67,21 @@ const _: () = {
 };
 #[rustfmt::skip]
 const _: () = {
-    fn assert_storeopener_storeopening<T: StoreOpening>() {}
-    let _ = assert_storeopener_storeopening::<StoreOpener>;
+    fn assert_store_storeopening<T: StoreOpening>() {}
+    let _ = assert_store_storeopening::<codex_harness_nexus::Store>;
 };
 #[rustfmt::skip]
 const _: () = {
-    fn assert_storefamilies_familycatalog<T: FamilyCatalog>() {}
-    let _ = assert_storefamilies_familycatalog::<StoreFamilies>;
+    fn assert_sessionrecord_familial<T: Familial>() {}
+    let _ = assert_sessionrecord_familial::<SessionRecord>;
+};
+#[rustfmt::skip]
+const _: () = {
+    fn assert_malformedrecord_familial<T: Familial>() {}
+    let _ = assert_malformedrecord_familial::<MalformedRecord>;
+};
+#[rustfmt::skip]
+const _: () = {
+    fn assert_storedconfiguration_familial<T: Familial>() {}
+    let _ = assert_storedconfiguration_familial::<StoredConfiguration>;
 };

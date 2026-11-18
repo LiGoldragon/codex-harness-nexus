@@ -9,14 +9,12 @@ Library
   Rollout.[ Watched.Watch Pending.FilePath Unlocated ]
   SessionRecord.{ Session Observed Rollout }
   MalformedRecord.{ FlowId ByteOffset ParseFailure }
-  StoredConfiguration.{ Configuration }
-  StoreOpener.{}
-  StoreFamilies.{} ]
+  StoredConfiguration.{ Configuration } ]
 [ StorePath.[ path.[ FilePath ] ]
-  StoreOpening.[ open.{ [ StorePath ] [ Result<Store Diagnostic> ] } ]
-  FamilyCatalog.[ session.[ TableDescriptor<SessionRecord> ]
-                  malformed.[ TableDescriptor<MalformedRecord> ]
-                  configuration.[ TableDescriptor<StoredConfiguration> ] ] ]
+  StoreOpening.[ open:{ [ StorePath ] [ Result<Self Diagnostic> ] } ]
+  Familial.[ descriptor:[ TableDescriptor<Self> ] ] ]
 [ FilePath.[ StorePath ]
-  StoreOpener.[ StoreOpening ]
-  StoreFamilies.[ FamilyCatalog ] ]
+  Store.[ StoreOpening ]
+  SessionRecord.[ Familial ]
+  MalformedRecord.[ Familial ]
+  StoredConfiguration.[ Familial ] ]

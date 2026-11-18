@@ -15,8 +15,7 @@ use signal_codex_harness_nexus::{Changed, Diagnostic};
 use crate::diagnosing::Diagnosing as _;
 use crate::generated::folding::SessionChange;
 use crate::generated::memory::{
-    FamilyCatalog, MalformedRecord, SessionRecord, StoreFamilies, StoreOpener, StoreOpening,
-    StorePath, StoredConfiguration,
+    Familial, MalformedRecord, SessionRecord, StoreOpening, StorePath, StoredConfiguration,
 };
 use crate::generated::runtime::{Planned, Remembering, Sessional, Settable};
 
@@ -45,24 +44,28 @@ impl EngineRecord for StoredConfiguration {
     }
 }
 
-impl FamilyCatalog for StoreFamilies {
-    fn session(&self) -> TableDescriptor<SessionRecord> {
+impl Familial for SessionRecord {
+    fn descriptor() -> TableDescriptor<Self> {
         TableDescriptor::new(
             SESSIONS,
             FamilyName::new("codex-harness-session"),
             SchemaHash::for_label("codex-harness-session-v1"),
         )
     }
+}
 
-    fn malformed(&self) -> TableDescriptor<MalformedRecord> {
+impl Familial for MalformedRecord {
+    fn descriptor() -> TableDescriptor<Self> {
         TableDescriptor::new(
             MALFORMED,
             FamilyName::new("codex-harness-malformed-row"),
             SchemaHash::for_label("codex-harness-malformed-row-v1"),
         )
     }
+}
 
-    fn configuration(&self) -> TableDescriptor<StoredConfiguration> {
+impl Familial for StoredConfiguration {
+    fn descriptor() -> TableDescriptor<Self> {
         TableDescriptor::new(
             CONFIGURATION,
             FamilyName::new("codex-harness-configuration"),
@@ -86,27 +89,28 @@ impl StorePath for harness::FilePath {
 }
 
 /// A store is opened at its path, every family declared in the open.
-impl StoreOpening for StoreOpener {
-    fn open<N: StorePath>(&self, input: N) -> Result<Store, Diagnostic> {
-        let path = Path::new(&input.path().0);
+impl StoreOpening for Store {
+    fn open<N: StorePath>(input: N) -> Result<Self, Diagnostic> {
+        let file_path = input.path();
+        let path = Path::new(&file_path.0);
         if let Some(directory) = path.parent() {
             std::fs::create_dir_all(directory).map_err(|error| error.diagnostic())?;
         }
         let mut engine = Engine::open(
             EngineOpen::new(path, SCHEMA_VERSION)
-                .with_family(&StoreFamilies {}.session())
-                .with_family(&StoreFamilies {}.malformed())
-                .with_family(&StoreFamilies {}.configuration()),
+                .with_family(&SessionRecord::descriptor())
+                .with_family(&MalformedRecord::descriptor())
+                .with_family(&StoredConfiguration::descriptor()),
         )
         .map_err(|error| error.diagnostic())?;
         let sessions = engine
-            .register_table(StoreFamilies {}.session())
+            .register_table(SessionRecord::descriptor())
             .map_err(|error| error.diagnostic())?;
         let malformed = engine
-            .register_table(StoreFamilies {}.malformed())
+            .register_table(MalformedRecord::descriptor())
             .map_err(|error| error.diagnostic())?;
         let configuration = engine
-            .register_table(StoreFamilies {}.configuration())
+            .register_table(StoredConfiguration::descriptor())
             .map_err(|error| error.diagnostic())?;
         Ok(Self {
             engine,

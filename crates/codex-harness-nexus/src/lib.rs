@@ -4,8 +4,8 @@
 //! apart from every answer the translator gives; and the name its sockets
 //! take.
 
-extern crate self as folding;
 extern crate self as codex_harness_nexus;
+extern crate self as folding;
 extern crate self as memory;
 extern crate self as operation;
 
