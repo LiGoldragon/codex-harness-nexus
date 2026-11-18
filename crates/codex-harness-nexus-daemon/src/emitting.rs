@@ -77,7 +77,7 @@ impl Carrying for PairedTranslator {
             frame_capacity,
             ..
         } = self.admission;
-        let outcome = match self.lane.emit(&emission, deadline, frame_capacity) {
+        let outcome: Outcome = match self.lane.emit(&emission, deadline, frame_capacity) {
             Ok(outcome) => outcome,
             Err(failure) => {
                 let unanswered = format!("unanswered {emission:?}: {failure:?}");
