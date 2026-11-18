@@ -31,6 +31,9 @@ pub use generated::memory::*;
 pub use generated::operation::*;
 pub use generated::runtime::*;
 pub use naming::{CodexHarness, MemoryPlacing};
-pub use nexus::{HarnessNexus, Locking};
+pub use nexus::{ConfigurationReading, HarnessNexus, Locking};
 pub use store::{Familial, Opening, Store};
-pub use watching::Watcher;
+pub use watching::{
+    Channelled, DirectoryWatch, Followed, Placement, Placing, Reach, Replacing, SessionsWatch,
+    Settling, WatchWord, Watching,
+};

@@ -7,7 +7,7 @@ harness = { package = "harness-nexus-library", git = "https://github.com/LiGoldr
 flow = { package = "flow-ethos", git = "https://github.com/LiGoldragon/flow", rev = "062ef9e1", default-features = false }
 signal = { git = "https://github.com/LiGoldragon/signal", rev = "4f5cbb9", default-features = false }
 signal-codex-harness-nexus = { git = "https://github.com/LiGoldragon/signal-codex-harness-nexus", rev = "6a6fd1c53a2186689ee31e849203e7dd67f76c99", default-features = false }
-meta-signal-codex-harness-nexus = { git = "https://github.com/LiGoldragon/meta-signal-codex-harness-nexus", rev = "30e24bf549ab07d17bf413b7c952a3373bf1f781", default-features = false }
+meta-signal-codex-harness-nexus = { git = "https://github.com/LiGoldragon/meta-signal-codex-harness-nexus", rev = "b6039b70491a2b4b778af4b094c3b5782da2964e", default-features = false }
 nexus = { git = "https://github.com/LiGoldragon/nexus", rev = "d020a62", default-features = false }
 nexus-exchange = { git = "https://github.com/LiGoldragon/nexus", rev = "63a2d477ca194913c847d15f227637d84fbe9aeb", default-features = false }
 nexus-serving = { git = "https://github.com/LiGoldragon/nexus", rev = "63a2d477ca194913c847d15f227637d84fbe9aeb", default-features = false }

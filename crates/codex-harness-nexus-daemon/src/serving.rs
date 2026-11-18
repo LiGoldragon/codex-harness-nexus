@@ -2,12 +2,13 @@
 //! is served within, its meta answer and its public answer. Its name is the
 //! core's, which its translator names it by too.
 
-use std::sync::mpsc;
+use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use codex_harness_nexus::{
-    CodexHarness, HarnessNexus, MemoryPlacing as _, Opening as _, Remembering as _, Store,
+    Channelled as _, CodexHarness, ConfigurationReading as _, HarnessNexus, MemoryPlacing as _,
+    Opening as _, SessionsWatch, Store, WatchWord,
 };
 use meta_signal_codex_harness_nexus as meta;
 use nexus_exchange::{Named as _, ValidAdmission};
@@ -21,7 +22,7 @@ use signal::{Frame, FrameCapacity};
 use signal_codex_harness_nexus::{Answer, Answerable as _, Changed, Input, Observations, Output};
 
 use crate::emitting::PairedTranslator;
-use crate::waking::ReadyOpening as _;
+use crate::waking::{ReadyOpening as _, WatchFollowing as _};
 
 /// The bounds the public socket is served within: the admission the pair
 /// launcher handed the Nexus.
@@ -41,13 +42,13 @@ impl TransportBounded for Bounds {
 
 /// Everything one served Nexus holds: the Nexus itself, its emissions carried
 /// to its paired translator, its listeners, its bounds, whether its public
-/// socket is open, and which watch of its sessions directories is current.
+/// socket is open, and the words of its watch, which one thread follows.
 pub struct Serving {
     pub nexus: HarnessNexus<PairedTranslator>,
     pub listeners: Listeners<CodexHarness>,
     pub bounds: Arc<Bounds>,
     pub opened: OnceLock<()>,
-    pub watch_generation: Mutex<u64>,
+    pub words: Mutex<Receiver<WatchWord>>,
 }
 
 /// The served Nexus, shared by the meta thread, the public accepting and
@@ -69,9 +70,10 @@ pub trait DaemonStarting: Sized {
     ) -> Result<Self, Box<dyn std::error::Error>>;
 
     /// Serves until a listener fails, and answers with that failure: the
-    /// meta socket and the public accepting each on a thread of its own,
-    /// the public socket's connections on `runtime`. A configuration already
-    /// ready opens the public socket at once.
+    /// meta socket, the public accepting and the watch each on a thread of
+    /// its own, the public socket's connections on `runtime`. The sessions
+    /// directories already recorded are watched, and a configuration
+    /// already ready opens the public socket at once.
     fn serve(self, runtime: tokio::runtime::Handle) -> Result<(), Box<dyn std::error::Error>>;
 }
 
@@ -108,6 +110,7 @@ impl DaemonStarting for Daemon {
         let lane = EmissionLane::from(listeners.paths().translator.clone());
         let store =
             Store::open(&place.memory_path::<CodexHarness>()).map_err(|diagnostic| diagnostic.0)?;
+        let (sessions_watch, words) = SessionsWatch::channelled();
         Ok(Self {
             serving: Arc::new(Serving {
                 nexus: HarnessNexus {
@@ -116,16 +119,23 @@ impl DaemonStarting for Daemon {
                     serial: Mutex::new(()),
                     observations: Mutex::new(None),
                     configurations: Mutex::new(None),
+                    sessions_watch: Mutex::new(sessions_watch),
                 },
                 listeners,
                 bounds: Arc::new(Bounds { admission }),
                 opened: OnceLock::new(),
-                watch_generation: Mutex::new(0),
+                words: Mutex::new(words),
             }),
         })
     }
 
     fn serve(self, runtime: tokio::runtime::Handle) -> Result<(), Box<dyn std::error::Error>> {
+        if let Err(error) = self.watch_recorded() {
+            eprintln!(
+                "Codex Harness Nexus cannot watch its recorded sessions directories: {error}"
+            );
+        }
+        self.follow_watch();
         self.open()?;
         let (failed, failure) = mpsc::channel();
         let meta = self.clone();
@@ -165,9 +175,10 @@ impl DaemonStarting for Daemon {
 /// The meta socket: Configure sets one value, and a value that makes the
 /// configuration ready, or moves the sessions directories, opens what
 /// follows from it; the text budget is the translator's, which answers it
-/// itself, so one sent here is refused. Subscribe answers the configuration
-/// as the Nexus holds it, one Opened frame, since the meta exchange answers
-/// once; its text budget is the translator's and stays unset here.
+/// itself, so one sent here is refused. Subscribe answers the readout, the
+/// configuration as the Nexus holds it and the sessions directories it
+/// awaits, one Opened frame, since the meta exchange answers once; its text
+/// budget is the translator's and stays unset here.
 impl MetaAnswering for Daemon {
     type Query = meta::Input;
     type Response = meta::Output;
@@ -187,8 +198,8 @@ impl MetaAnswering for Daemon {
                 }
                 output
             }
-            meta::Input::Subscribe => match nexus.store.configuration() {
-                Ok(configuration) => meta::Output::Subscribed(Frame::Opened(configuration)),
+            meta::Input::Subscribe => match nexus.readout() {
+                Ok(readout) => meta::Output::Subscribed(Frame::Opened(readout)),
                 Err(diagnostic) => meta::Output::ConfigureRefused(
                     meta::ConfigurationRefusal::Unrecorded(meta::Diagnostic(diagnostic.0)),
                 ),

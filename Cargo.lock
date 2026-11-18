@@ -455,8 +455,8 @@ dependencies = [
 
 [[package]]
 name = "meta-signal-codex-harness-nexus"
-version = "0.3.0"
-source = "git+https://github.com/LiGoldragon/meta-signal-codex-harness-nexus?rev=30e24bf549ab07d17bf413b7c952a3373bf1f781#30e24bf549ab07d17bf413b7c952a3373bf1f781"
+version = "0.4.0"
+source = "git+https://github.com/LiGoldragon/meta-signal-codex-harness-nexus?rev=b6039b70491a2b4b778af4b094c3b5782da2964e#b6039b70491a2b4b778af4b094c3b5782da2964e"
 dependencies = [
  "datom-codec",
  "harness-nexus-library",

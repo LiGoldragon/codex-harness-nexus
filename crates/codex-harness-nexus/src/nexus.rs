@@ -6,7 +6,9 @@
 use std::sync::{Mutex, MutexGuard};
 
 use harness::{FilePath, Observable, Session};
-use meta_signal_codex_harness_nexus::{Configuration, ConfigurationRefusal, Set};
+use meta_signal_codex_harness_nexus::{
+    Configuration, ConfigurationChange, ConfigurationReadout, ConfigurationRefusal, Set,
+};
 use nexus::{Capacity, CapacityRefusal, Publisher, Publishing};
 use signal_codex_harness_nexus::{
     Changed, Diagnostic, Hook, Observation, Observations, Output, ReportFailure,
@@ -24,15 +26,21 @@ use crate::generated::runtime::{
     Remembering, Sessional,
 };
 use crate::store::Store;
+use crate::watching::{Replacing as _, SessionsWatch};
 
 /// The Nexus whole. Its translator carries every emission; its publishers
-/// exist once the subscriber capacity is configured.
+/// exist once the subscriber capacity is configured; its watch of the
+/// sessions directories is opened as they are set.
+///
+/// Its locks are taken in one order: the serial lock, then the watch, then
+/// a publisher.
 pub struct HarnessNexus<Translator> {
     pub store: Store,
     pub translator: Translator,
     pub serial: Mutex<()>,
     pub observations: Mutex<Option<Publisher<Observations, Changed>>>,
-    pub configurations: Mutex<Option<Publisher<Configuration, Set>>>,
+    pub configurations: Mutex<Option<Publisher<ConfigurationReadout, ConfigurationChange>>>,
+    pub sessions_watch: Mutex<SessionsWatch>,
 }
 
 impl Readying for Configuration {
@@ -43,6 +51,22 @@ impl Readying for Configuration {
             sessions_directories: self.sessions_directories_option.clone()?,
             thread_databases: self.thread_databases_option.clone()?,
             capacity: self.capacity_option?,
+        })
+    }
+}
+
+/// The configuration as it is read out: what is recorded, and the sessions
+/// directories recorded but not yet there, which the Nexus awaits.
+pub trait ConfigurationReading {
+    fn readout(&self) -> Result<ConfigurationReadout, Diagnostic>;
+}
+
+impl<Translator> ConfigurationReading for HarnessNexus<Translator> {
+    fn readout(&self) -> Result<ConfigurationReadout, Diagnostic> {
+        let configuration = self.store.configuration()?;
+        Ok(ConfigurationReadout {
+            configuration,
+            awaited_directories: self.sessions_watch.locked().awaited(),
         })
     }
 }
@@ -343,6 +367,20 @@ impl<Translator> meta_signal_codex_harness_nexus::Answering for HarnessNexus<Tra
                 publisher.resize(Capacity(capacity.0)).map_err(refused)?;
             }
         }
+        // Sessions directories are watched before they are kept: one there
+        // that cannot be watched is refused whole and never recorded, and
+        // one not yet there is awaited.
+        let mut sessions = self.sessions_watch.locked();
+        let opened = match set {
+            Set::SessionsDirectories(directories) => {
+                Some(sessions.opened(directories).map_err(|unwatchable| {
+                    MetaOutput::ConfigureRefused(ConfigurationRefusal::UnwatchableDirectory(
+                        unwatchable,
+                    ))
+                })?)
+            }
+            _ => None,
+        };
         if let Err(diagnostic) = self.store.configure(set.clone()) {
             return Err(MetaOutput::ConfigureRefused(
                 ConfigurationRefusal::Unrecorded(meta_signal_codex_harness_nexus::Diagnostic(
@@ -350,15 +388,25 @@ impl<Translator> meta_signal_codex_harness_nexus::Answering for HarnessNexus<Tra
                 )),
             ));
         }
-        if let Some(publisher) = self.configurations.locked().as_ref() {
-            publisher.publish(set.clone());
+        let configurations = self.configurations.locked();
+        if let Some(publisher) = configurations.as_ref() {
+            publisher.publish(ConfigurationChange::Set(set.clone()));
+        }
+        if let Some(watch) = opened {
+            sessions.replaced(watch);
+            if let Some(publisher) = configurations.as_ref() {
+                publisher.publish(ConfigurationChange::AwaitedDirectories(sessions.awaited()));
+            }
         }
         Ok(set.clone())
     }
 
     fn subscribe(
         &self,
-    ) -> Result<signal::Stream<Configuration, Set>, meta_signal_codex_harness_nexus::Output> {
+    ) -> Result<
+        signal::Stream<ConfigurationReadout, ConfigurationChange>,
+        meta_signal_codex_harness_nexus::Output,
+    > {
         use meta_signal_codex_harness_nexus::Output as MetaOutput;
         let _serial = self.serial.locked();
         let configuration = self.store.configuration().map_err(|diagnostic| {
@@ -371,10 +419,15 @@ impl<Translator> meta_signal_codex_harness_nexus::Answering for HarnessNexus<Tra
             .ok_or(MetaOutput::ConfigureRefused(
                 ConfigurationRefusal::CapacityUnset,
             ))?;
+        let sessions = self.sessions_watch.locked();
         let mut publisher = self.configurations.locked();
         if publisher.is_none() {
+            let readout = ConfigurationReadout {
+                configuration,
+                awaited_directories: sessions.awaited(),
+            };
             *publisher = Some(
-                Publisher::create(configuration, Capacity(capacity.0)).map_err(|_| {
+                Publisher::create(readout, Capacity(capacity.0)).map_err(|_| {
                     MetaOutput::ConfigureRefused(ConfigurationRefusal::InvalidCapacity(capacity))
                 })?,
             );

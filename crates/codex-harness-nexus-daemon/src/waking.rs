@@ -1,15 +1,17 @@
-//! What a ready configuration opens: the public socket, once, and the
-//! kernel's watch on the sessions directories, each time they are set. The
-//! watch is opened before the one startup look, so no write falls between
-//! them; a watch superseded by a newer one ends at its next word.
+//! What a ready configuration opens, and what the kernel's word wakes. The
+//! public socket opens once the configuration is ready; it does not wait
+//! for a sessions directory, which Codex may make only once its first
+//! session starts. The watch of the sessions directories is the core's,
+//! opened as they are set; its words are followed here, on a thread of
+//! their own, for the daemon's life. Each look at the Memory's rollouts
+//! follows the watch it answers to, so no write falls between them.
 
-use std::sync::{Arc, MutexGuard};
+use std::sync::Arc;
 
 use codex_harness_nexus::{
-    Awaiting as _, Locking as _, Operation, Performing as _, Readying as _, Remembering as _,
-    Waking as _, Watcher,
+    Locking as _, Operation, Performing as _, Readying as _, Remembering as _, Waking as _,
+    Watching as _,
 };
-use harness::FilePath;
 use meta_signal_codex_harness_nexus::Set;
 use nexus_serving::Listening as _;
 use signal_codex_harness_nexus::ReportFailure;
@@ -17,36 +19,35 @@ use signal_codex_harness_nexus::ReportFailure;
 use crate::serving::{Daemon, Serving};
 
 pub trait ReadyOpening {
-    /// Opens what a ready configuration opens, if it is ready and not yet
-    /// open.
+    /// Opens the public socket, if the configuration is ready and it is not
+    /// yet open, then looks once at every rollout the Memory names.
     fn open(&self) -> Result<(), Box<dyn std::error::Error>>;
 
     /// After a value was set: open, if this made the configuration ready;
-    /// watch anew, if it moved the sessions directories of an open Nexus.
+    /// look again, if it moved the sessions directories of an open Nexus.
     fn configured(&self, set: &Set) -> Result<(), Box<dyn std::error::Error>>;
 }
 
-pub trait Watching {
-    /// Watches these directories in place of any watch before, then looks
-    /// once at every rollout the Memory names.
-    fn watch(&self, directories: Vec<FilePath>) -> Result<(), Box<dyn std::error::Error>>;
+pub trait WatchFollowing {
+    /// Watches the sessions directories the Memory recorded, as the daemon
+    /// starts; one that can no longer be watched is told, since it was
+    /// recorded and cannot be refused.
+    fn watch_recorded(&self) -> Result<(), Box<dyn std::error::Error>>;
+
+    /// Follows every word of the kernel on a thread of its own: each moves
+    /// the watch where it must, and once the Nexus is open, a directory
+    /// come to be there is looked at, and each file written is read.
+    fn follow_watch(&self);
 }
 
-/// What the watch threads ask of the served Nexus.
+/// What the watch thread asks of the served Nexus.
 pub trait Supervising {
-    /// The generation of the current watch.
-    fn generation(&self) -> MutexGuard<'_, u64>;
-
     /// Performs each operation in turn; a refusal is reported and the rest
     /// go on.
     fn perform_all(&self, operations: Result<Vec<Operation>, ReportFailure>);
 }
 
 impl Supervising for Serving {
-    fn generation(&self) -> MutexGuard<'_, u64> {
-        self.watch_generation.locked()
-    }
-
     fn perform_all(&self, operations: Result<Vec<Operation>, ReportFailure>) {
         match operations {
             Ok(operations) => {
@@ -69,58 +70,65 @@ impl ReadyOpening for Daemon {
             .store
             .configuration()
             .map_err(|diagnostic| diagnostic.0)?;
-        let Some(ready) = configuration.ready() else {
-            return Ok(());
-        };
-        if serving.opened.get().is_some() {
+        if configuration.ready().is_none() || serving.opened.get().is_some() {
             return Ok(());
         }
-        // Open only once the watch is open: a watch that fails leaves the
-        // Nexus unopened, and the staged socket is dropped with its file.
         let listener = serving.listeners.stage_public()?;
-        self.watch(ready.sessions_directories.0)?;
         if serving.opened.set(()).is_err() {
             return Ok(());
         }
         serving.listeners.publish_public(listener);
+        serving.perform_all(serving.nexus.startup());
         Ok(())
     }
 
     fn configured(&self, set: &Set) -> Result<(), Box<dyn std::error::Error>> {
         match set {
-            Set::SessionsDirectories(directories) if self.serving.opened.get().is_some() => {
-                self.watch(directories.0.clone())
+            Set::SessionsDirectories(_) if self.serving.opened.get().is_some() => {
+                self.serving.perform_all(self.serving.nexus.startup());
+                Ok(())
             }
             _ => self.open(),
         }
     }
 }
 
-impl Watching for Daemon {
-    fn watch(&self, directories: Vec<FilePath>) -> Result<(), Box<dyn std::error::Error>> {
-        let watcher = Watcher::open(directories).map_err(|diagnostic| diagnostic.0)?;
-        let current = {
-            let mut generation = self.serving.generation();
-            *generation += 1;
-            *generation
-        };
+impl WatchFollowing for Daemon {
+    fn watch_recorded(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let configuration = self
+            .serving
+            .nexus
+            .store
+            .configuration()
+            .map_err(|diagnostic| diagnostic.0)?;
+        if let Some(directories) = configuration.sessions_directories_option {
+            self.serving
+                .nexus
+                .watch(&directories)
+                .map_err(|unwatchable| {
+                    format!("{}: {}", unwatchable.file_path.0, unwatchable.diagnostic.0)
+                })?;
+        }
+        Ok(())
+    }
+
+    fn follow_watch(&self) {
         let serving = Arc::clone(&self.serving);
         std::thread::spawn(move || {
-            loop {
-                let written = match watcher.written() {
-                    Ok(written) => written,
-                    Err(diagnostic) => {
-                        eprintln!("Codex Harness Nexus watch ended: {}", diagnostic.0);
-                        return;
-                    }
-                };
-                if *serving.generation() != current {
-                    return;
+            let words = serving.words.locked();
+            while let Ok(word) = words.recv() {
+                let followed = serving.nexus.follow(word);
+                for failure in &followed.failures {
+                    eprintln!("Codex Harness Nexus watch: {}", failure.0);
                 }
-                serving.perform_all(serving.nexus.woken(written));
+                if serving.opened.get().is_none() {
+                    continue;
+                }
+                if !followed.arrived.is_empty() {
+                    serving.perform_all(serving.nexus.startup());
+                }
+                serving.perform_all(serving.nexus.woken(followed.written));
             }
         });
-        self.serving.perform_all(self.serving.nexus.startup());
-        Ok(())
     }
 }
