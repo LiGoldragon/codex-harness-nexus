@@ -80,7 +80,7 @@
               cd ${./crates}
               rustfmt --edition 2024 --check \
                 codex-harness-nexus/src/{lib,diagnosing,failing,folded,naming,nexus,store,views,watching}.rs \
-                codex-harness-translator/src/{lib,emitting,rollout,translating}.rs \
+                codex-harness-translator/src/{lib,emitting,rollout,settings_actor,translating}.rs \
                 codex-harness-translator/src/bin/{codex-harness,codex-harness-meta,codex-harness-translator,codex-harness-pair}.rs \
                 codex-harness-nexus-daemon/src/{lib,bootstrap,emitting,main,serving,waking}.rs \
                 codex-harness-nexus-daemon/tests/{bootstrap_order,lane_failure}.rs
@@ -93,6 +93,8 @@
                 ethos-zero "Generate.{ ${./crates/codex-harness-nexus/ethos}/$file.ethos $PWD/generated }"
                 diff -u ${./crates/codex-harness-nexus/src/generated}/$file.rs generated/$file.rs
               done
+              ethos-zero "Generate.{ ${./crates/codex-harness-translator/ethos}/translator_settings.ethos $PWD/generated }"
+              diff -u ${./crates/codex-harness-translator/src/generated}/translator_settings.rs generated/translator_settings.rs
               ethos-zero "Generate.{ ${./crates/codex-harness-translator/ethos}/rollout.ethos $PWD/generated }"
               diff -u ${./crates/codex-harness-translator/src/generated}/rollout.rs generated/rollout.rs
               touch "$out"
