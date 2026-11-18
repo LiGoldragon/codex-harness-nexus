@@ -16,7 +16,7 @@ use nexus::{Capacity, CapacityRefusal, Publisher, Publishing};
 use signal::Following;
 use signal_codex_harness_nexus::{
     Changed, Diagnostic, FoldRefusal, Hook, Observation, Observations, Output, ReportFailure,
-    StaleReading_Data,
+    ReportFault, RolloutWatchFailure, StaleReading_Data,
 };
 
 use crate::generated::actor::{
@@ -271,7 +271,7 @@ where
             _ => None,
         };
         let (performed, attached) = {
-            let (batch, attached, lane_failure_option) = match self.attempt(input)? {
+            let (mut batch, mut attached, lane_failure_option) = match self.attempt(input)? {
                 Outcome::Reported(batch) | Outcome::Read(batch) => (batch, None, None),
                 Outcome::ReportedLaneFailed(reported) => {
                     (reported.event_batch, None, Some(reported.lane_failure))
@@ -286,10 +286,58 @@ where
                 Outcome::Discovered(None) => {
                     return Ok(Performed {
                         changed_vector: vec![],
-                        lane_failure_option: None,
+                        report_fault_vector: vec![],
                     });
                 }
             };
+            let mut report_fault_vector = lane_failure_option
+                .into_iter()
+                .map(ReportFault::LaneFailed)
+                .collect::<Vec<_>>();
+            let mut rollout_watch_preplaced = false;
+            if let Some(watch) = attached.as_ref() {
+                rollout_watch_preplaced = true;
+                let configuration = self
+                    .store
+                    .configuration()
+                    .map_err(ReportFailure::Unrecorded)?;
+                let mut records = self.store.recall_all().map_err(ReportFailure::Unrecorded)?;
+                for record in &mut records {
+                    if record.observed.flow_id == watch.flow_id {
+                        record.rollout = Rollout::Pending(watch.file_path.clone());
+                    }
+                }
+                let watch_plan = self
+                    .sessions_watch
+                    .planned(configuration.sessions_directories_option, records);
+                let failures = self.sessions_watch.retarget(watch_plan);
+                let mut attached_path_failed = false;
+                for failure in failures {
+                    if failure.watch_target_option == Some(WatchTarget::RolloutFile) {
+                        let file_path = failure
+                            .file_path_option
+                            .expect("rollout placement failures carry their target path");
+                        if file_path == watch.file_path {
+                            attached_path_failed = true;
+                        }
+                        report_fault_vector.push(ReportFault::Unwatched(RolloutWatchFailure {
+                            file_path,
+                            diagnostic: failure.diagnostic,
+                        }));
+                    } else {
+                        eprintln!(
+                            "Codex Harness Nexus watch {:?} at {:?}: {}",
+                            failure.watch_target_option,
+                            failure.file_path_option,
+                            failure.diagnostic.0
+                        );
+                    }
+                }
+                if attached_path_failed {
+                    batch.rollout_option = Some(Rollout::Pending(watch.file_path.clone()));
+                    attached = None;
+                }
+            }
             let record = self
                 .store
                 .recall(batch.session_id())
@@ -297,47 +345,78 @@ where
             let plan = batch.fold(record)?;
             let changes = self.store.commit(plan).map_err(ReportFailure::Unrecorded)?;
             self.publish(changes.clone());
-            let configuration = self
-                .store
-                .configuration()
-                .map_err(ReportFailure::Unrecorded)?;
-            let records = self.store.recall_all().map_err(ReportFailure::Unrecorded)?;
-            let watch_plan = self
-                .sessions_watch
-                .planned(configuration.sessions_directories_option, records);
-            let failures = self.sessions_watch.retarget(watch_plan);
-            for failure in failures {
-                eprintln!(
-                    "Codex Harness Nexus rollout watch {:?} at {:?}: {}",
-                    failure.watch_target_option, failure.file_path_option, failure.diagnostic.0
-                );
+            if !rollout_watch_preplaced {
+                let configuration = self
+                    .store
+                    .configuration()
+                    .map_err(ReportFailure::Unrecorded)?;
+                let records = self.store.recall_all().map_err(ReportFailure::Unrecorded)?;
+                let watch_plan = self
+                    .sessions_watch
+                    .planned(configuration.sessions_directories_option, records);
+                for failure in self.sessions_watch.retarget(watch_plan) {
+                    if failure.watch_target_option == Some(WatchTarget::RolloutFile) {
+                        let file_path = failure
+                            .file_path_option
+                            .expect("rollout placement failures carry their target path");
+                        report_fault_vector.push(ReportFault::Unwatched(RolloutWatchFailure {
+                            file_path,
+                            diagnostic: failure.diagnostic,
+                        }));
+                    } else {
+                        eprintln!(
+                            "Codex Harness Nexus watch {:?} at {:?}: {}",
+                            failure.watch_target_option,
+                            failure.file_path_option,
+                            failure.diagnostic.0
+                        );
+                    }
+                }
             }
             (
                 Performed {
                     changed_vector: changes,
-                    lane_failure_option,
+                    report_fault_vector,
                 },
                 attached,
             )
         };
         let mut performed = performed;
         if let Some(path) = explicit_path.filter(|path| Path::new(&path.0).exists()) {
-            match self.perform(Operation::Discovering(path)) {
-                Ok(discovered) => {
-                    performed.changed_vector.extend(discovered.changed_vector);
-                    performed.lane_failure_option = performed
-                        .lane_failure_option
-                        .or(discovered.lane_failure_option);
+            let path_unwatched = performed.report_fault_vector.iter().any(|fault| {
+                matches!(fault, ReportFault::Unwatched(failure) if failure.file_path == path)
+            });
+            if !path_unwatched {
+                match self.perform(Operation::Discovering(path)) {
+                    Ok(discovered) => {
+                        performed.changed_vector.extend(discovered.changed_vector);
+                        performed
+                            .report_fault_vector
+                            .extend(discovered.report_fault_vector);
+                    }
+                    Err(ReportFailure::LaneFailed(lane_failure)) => performed
+                        .report_fault_vector
+                        .push(ReportFault::LaneFailed(lane_failure)),
+                    Err(ReportFailure::Unreadable(failure)) => performed
+                        .report_fault_vector
+                        .push(ReportFault::Unread(failure)),
+                    Err(failure) => return Err(failure),
                 }
-                Err(failure) => return Err(failure),
             }
         } else if let Some(watch) = attached {
             match self.perform(Operation::Reading(watch)) {
                 Ok(read) => {
                     performed.changed_vector.extend(read.changed_vector);
-                    performed.lane_failure_option =
-                        performed.lane_failure_option.or(read.lane_failure_option);
+                    performed
+                        .report_fault_vector
+                        .extend(read.report_fault_vector);
                 }
+                Err(ReportFailure::LaneFailed(lane_failure)) => performed
+                    .report_fault_vector
+                    .push(ReportFault::LaneFailed(lane_failure)),
+                Err(ReportFailure::Unreadable(failure)) => performed
+                    .report_fault_vector
+                    .push(ReportFault::Unread(failure)),
                 Err(failure) => return Err(failure),
             }
         }
@@ -880,14 +959,18 @@ where
     fn report(&self, hook: &Hook) -> Result<(), Output> {
         match NexusPort::report(self, hook) {
             Ok(Performed {
-                lane_failure_option: None,
+                report_fault_vector,
                 ..
-            }) => Ok(()),
+            }) if report_fault_vector.is_empty() => Ok(()),
             Ok(Performed {
-                lane_failure_option: Some(lane_failure),
+                report_fault_vector,
                 ..
-            }) => Err(Output::ReportedLaneFailed(lane_failure)),
-            Err(ReportFailure::Unreadable(failure)) => Err(Output::ReportedUnread(failure)),
+            }) => Err(Output::ReportedWithFaults(report_fault_vector)),
+            Err(ReportFailure::Unreadable(failure)) => {
+                Err(Output::ReportedWithFaults(vec![ReportFault::Unread(
+                    failure,
+                )]))
+            }
             Err(failure) => Err(Output::ReportRefused(failure)),
         }
     }

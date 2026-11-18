@@ -18,7 +18,7 @@ pub struct ReadyConfiguration {
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub struct Performed {
     pub changed_vector: std::vec::Vec<signal_codex_harness_nexus::Changed>,
-    pub lane_failure_option: std::option::Option<nexus_exchange::LaneFailure>,
+    pub report_fault_vector: std::vec::Vec<signal_codex_harness_nexus::ReportFault>,
 }
 #[rustfmt::skip]
 pub trait Diagnosing {

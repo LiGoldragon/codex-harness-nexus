@@ -3,13 +3,12 @@ Library
   folding:FoldPlan
   memory:SessionRecord
   harness:[ SessionId FilePath ]
-  nexus_exchange:LaneFailure
-  signal_codex_harness_nexus:[ Hook ReportFailure Changed Diagnostic MemoryFault ]
+  signal_codex_harness_nexus:[ Hook ReportFailure ReportFault Changed Diagnostic MemoryFault ]
   meta_signal_codex_harness_nexus:[ Set Configuration FlowsRoot IdentityProducer
                                     SessionsDirectories Capacity ] ]
 [ ReadyConfiguration.{ FlowsRoot IdentityProducer SessionsDirectories
                        Capacity }
-  Performed.{ Vector<Changed> Option<LaneFailure> } ]   ; committed; the lane failed only where the effect did not need it
+  Performed.{ Vector<Changed> Vector<ReportFault> } ]   ; committed; every secondary fault accompanies its effect
 [ Diagnosing.[ diagnostic.[ Diagnostic ] ]
   Sessional.[ session_id.[ SessionId ] ]
   Operable.[ operation.[ Operation ] ]
