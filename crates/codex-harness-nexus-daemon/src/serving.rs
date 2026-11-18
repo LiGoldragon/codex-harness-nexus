@@ -116,8 +116,10 @@ impl Daemon {
 
 /// The meta socket: Configure sets one value, and a value that makes the
 /// configuration ready, or moves the sessions directories, opens what
-/// follows from it. Subscribe answers the configuration as it stands, one
-/// Opened frame, since the meta exchange answers once.
+/// follows from it; the text budget is the translator's, which answers it
+/// itself, so one sent here is refused. Subscribe answers the configuration
+/// as the Nexus holds it, one Opened frame, since the meta exchange answers
+/// once; its text budget is the translator's and stays unset here.
 impl MetaAnswering for Daemon {
     type Query = meta::Input;
     type Response = meta::Output;

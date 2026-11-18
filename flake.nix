@@ -9,7 +9,8 @@
       cargoNix = ./Cargo.nix;
       # What the pair launcher starts both processes with: the admission
       # every frame between them is read and written within, and the text
-      # limits the translator reads each request within.
+      # budget the translator starts with, its own setting on the meta socket
+      # thereafter.
       pairing = {
         frameDeadlineMilliseconds = 70000;
         frameCapacityBytes = 8388608;

@@ -289,9 +289,14 @@ where
 }
 
 impl<Translator> meta_signal_codex_harness_nexus::Answering for HarnessNexus<Translator> {
+    /// Every setting but the text budget is the Nexus's; the text budget is
+    /// its translator's own, answered there and refused here.
     fn configure(&self, set: &Set) -> Result<Set, meta_signal_codex_harness_nexus::Output> {
         use meta_signal_codex_harness_nexus::Output as MetaOutput;
         let refused = |refusal| Err(MetaOutput::ConfigureRefused(refusal));
+        if let Set::TextBudget(_) = set {
+            return refused(ConfigurationRefusal::TranslatorSetting);
+        }
         if let Set::SubscriberCapacity(capacity) = set
             && capacity.0 <= 0
         {
@@ -360,6 +365,7 @@ impl<Translator> meta_signal_codex_harness_nexus::Answering for HarnessNexus<Tra
 impl NamingPaths for Set {
     fn paths(&self) -> Vec<FilePath> {
         match self {
+            Set::TextBudget(_) => vec![],
             Set::FlowsRoot(root) => vec![FilePath(root.0.clone())],
             Set::IdentityProducer(producer) => vec![FilePath(producer.0.clone())],
             Set::SessionsDirectories(directories) => directories.0.clone(),

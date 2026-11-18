@@ -14,4 +14,4 @@ mod translating;
 
 pub use codex_harness_nexus::CodexHarness;
 pub use generated::rollout::*;
-pub use translating::{CodexHarnessTranslator, TranslatorSettings};
+pub use translating::{CodexHarnessTranslator, Limiting, TextBudgetSetting, TranslatorSettings};

@@ -172,6 +172,7 @@ impl Remembering for Store {
             .map_err(diagnostic)?;
         match snapshot.records() {
             [] => Ok(Configuration {
+                text_budget_option: None,
                 flows_root_option: None,
                 identity_producer_option: None,
                 sessions_directories_option: None,
