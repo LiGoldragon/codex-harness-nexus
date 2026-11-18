@@ -91,6 +91,19 @@ pub trait SessionsDirectoriesSetting {
     ) -> meta_signal_codex_harness_nexus::SessionsDirectories;
 }
 #[rustfmt::skip]
+pub trait PlacementPositioning {
+    fn placed(&self) -> Placement;
+}
+#[rustfmt::skip]
+pub trait PlacementState {
+    fn arrived(&self) -> bool;
+    fn reach(&self) -> Reach;
+}
+#[rustfmt::skip]
+pub trait ReachCoverage {
+    fn reaches(&self, input: Reach) -> bool;
+}
+#[rustfmt::skip]
 pub trait NexusRuntime {
     fn read_configuration(
         &self,
@@ -112,3 +125,18 @@ pub trait NexusRuntime {
     fn follow_watch(&mut self, input: WatchWord) -> std::vec::Vec<WatchConsequence>;
     fn open_public(&mut self) -> std::result::Result<Opened, ListenerFailure>;
 }
+#[rustfmt::skip]
+const _: () = {
+    fn assert_filepath_placementpositioning<T: PlacementPositioning>() {}
+    let _ = assert_filepath_placementpositioning::<harness::FilePath>;
+};
+#[rustfmt::skip]
+const _: () = {
+    fn assert_placement_placementstate<T: PlacementState>() {}
+    let _ = assert_placement_placementstate::<Placement>;
+};
+#[rustfmt::skip]
+const _: () = {
+    fn assert_reach_reachcoverage<T: ReachCoverage>() {}
+    let _ = assert_reach_reachcoverage::<Reach>;
+};

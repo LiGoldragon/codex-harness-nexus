@@ -9,7 +9,7 @@ use std::time::Duration;
 
 pub use codex_harness_nexus::ListenerFailure;
 use codex_harness_nexus::{
-    CodexHarness, HarnessNexus, Opening as _, SessionsWatch, Store, WatchWord,
+    CodexHarness, HarnessNexus, Opening as _, SessionsWatch, Store, WatchGeneration, WatchWord,
 };
 use meta_signal_codex_harness_nexus as meta;
 use nexus_exchange::{MemoryPlacing as _, Named as _, ValidAdmission};
@@ -99,7 +99,12 @@ impl DaemonStarting for Daemon {
         let lane = EmissionLane::from(listeners.paths().translator.clone());
         let store =
             Store::open(&place.memory_path::<CodexHarness>()).map_err(|diagnostic| diagnostic.0)?;
-        let (sessions_watch, words) = SessionsWatch::channelled();
+        let (sender, words) = mpsc::channel();
+        let sessions_watch = SessionsWatch {
+            sender,
+            drawn: WatchGeneration(0),
+            current: None,
+        };
         Ok(Self {
             serving: Arc::new(Serving {
                 nexus: HarnessNexus {

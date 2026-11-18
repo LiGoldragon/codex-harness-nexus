@@ -8,7 +8,7 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::Sender;
 
 use harness::FilePath;
 use meta_signal_codex_harness_nexus::{
@@ -20,8 +20,9 @@ use notify::{RecommendedWatcher, RecursiveMode, Watcher as _};
 use signal_codex_harness_nexus::{Diagnostic, ReportFailure};
 
 use crate::generated::actor::{
-    Placement, Reach, WatchChangeKind, WatchConsequence, WatchEvent, WatchFailure, WatchGeneration,
-    WatchResult, WatchWord,
+    Placement, PlacementPositioning as _, PlacementState as _, Reach, ReachCoverage as _,
+    WatchChangeKind, WatchConsequence, WatchEvent, WatchFailure, WatchGeneration, WatchResult,
+    WatchWord,
 };
 use crate::generated::memory::Rollout;
 use crate::generated::operation::Operation;
@@ -47,42 +48,43 @@ pub struct SessionsWatch {
     pub current: Option<DirectoryWatch>,
 }
 
-fn nearest(directory: &FilePath) -> PathBuf {
-    let path = Path::new(&directory.0);
-    path.ancestors()
-        .find(|ancestor| ancestor.is_dir())
-        .unwrap_or(path)
-        .to_path_buf()
-}
-
-fn placed(directory: FilePath) -> Placement {
-    let resting = nearest(&directory);
-    Placement {
-        file_path: directory,
-        file_path_option: Some(FilePath(resting.to_string_lossy().into_owned())),
+impl PlacementPositioning for FilePath {
+    fn placed(&self) -> Placement {
+        let path = Path::new(&self.0);
+        let resting = path
+            .ancestors()
+            .find(|ancestor| ancestor.is_dir())
+            .unwrap_or(path);
+        Placement {
+            file_path: self.clone(),
+            file_path_option: Some(FilePath(resting.to_string_lossy().into_owned())),
+        }
     }
 }
 
-fn arrived(placement: &Placement) -> bool {
-    placement
-        .file_path_option
-        .as_ref()
-        .is_some_and(|resting| Path::new(&resting.0) == Path::new(&placement.file_path.0))
-}
+impl PlacementState for Placement {
+    fn arrived(&self) -> bool {
+        self.file_path_option
+            .as_ref()
+            .is_some_and(|resting| Path::new(&resting.0) == Path::new(&self.file_path.0))
+    }
 
-fn reach(placement: &Placement) -> Reach {
-    if arrived(placement) {
-        Reach::Whole
-    } else {
-        Reach::Entries
+    fn reach(&self) -> Reach {
+        if self.arrived() {
+            Reach::Whole
+        } else {
+            Reach::Entries
+        }
     }
 }
 
-fn reaches(watched: &Reach, needed: &Reach) -> bool {
-    matches!(
-        (watched, needed),
-        (Reach::Whole, _) | (Reach::Entries, Reach::Entries)
-    )
+impl ReachCoverage for Reach {
+    fn reaches(&self, needed: Reach) -> bool {
+        matches!(
+            (self, needed),
+            (Reach::Whole, _) | (Reach::Entries, Reach::Entries)
+        )
+    }
 }
 
 impl From<&Reach> for RecursiveMode {
@@ -100,55 +102,39 @@ impl From<Reach> for RecursiveMode {
     }
 }
 
-fn owned_event(event: notify::Event) -> WatchEvent {
-    let watch_change_kind = match event.kind {
-        EventKind::Create(CreateKind::Folder) => WatchChangeKind::CreatedFolder,
-        EventKind::Create(_) => WatchChangeKind::Created,
-        EventKind::Remove(_) => WatchChangeKind::Removed,
-        EventKind::Modify(ModifyKind::Name(RenameMode::From)) => WatchChangeKind::RenamedFrom,
-        EventKind::Modify(_) => WatchChangeKind::Modified,
-        _ => WatchChangeKind::Other,
-    };
-    WatchEvent {
-        watch_change_kind,
-        file_path_vector: event
-            .paths
-            .into_iter()
-            .map(|path| FilePath(path.to_string_lossy().into_owned()))
-            .collect(),
-    }
-}
-
-fn owned_word(generation: WatchGeneration, event: notify::Result<notify::Event>) -> WatchWord {
-    let watch_result = match event {
-        Ok(event) => WatchResult::WatchEvent(owned_event(event)),
-        Err(error) => WatchResult::WatchFailure(WatchFailure {
-            file_path_option: error
+impl From<notify::Event> for WatchEvent {
+    fn from(event: notify::Event) -> Self {
+        let watch_change_kind = match event.kind {
+            EventKind::Create(CreateKind::Folder) => WatchChangeKind::CreatedFolder,
+            EventKind::Create(_) => WatchChangeKind::Created,
+            EventKind::Remove(_) => WatchChangeKind::Removed,
+            EventKind::Modify(ModifyKind::Name(RenameMode::From)) => WatchChangeKind::RenamedFrom,
+            EventKind::Modify(_) => WatchChangeKind::Modified,
+            _ => WatchChangeKind::Other,
+        };
+        Self {
+            watch_change_kind,
+            file_path_vector: event
                 .paths
-                .first()
-                .map(|path| FilePath(path.to_string_lossy().into_owned())),
-            diagnostic: Diagnostic(error.to_string()),
-        }),
-    };
-    WatchWord {
-        watch_generation: generation,
-        watch_result,
+                .into_iter()
+                .map(|path| FilePath(path.to_string_lossy().into_owned()))
+                .collect(),
+        }
     }
 }
 
-impl SessionsWatch {
-    /// The Nexus's watch, watching nothing yet, and the receiving end of
-    /// the channel every watch it opens speaks into.
-    pub fn channelled() -> (Self, Receiver<WatchWord>) {
-        let (sender, words) = channel();
-        (
-            Self {
-                sender,
-                drawn: WatchGeneration(0),
-                current: None,
-            },
-            words,
-        )
+impl From<notify::Result<notify::Event>> for WatchResult {
+    fn from(event: notify::Result<notify::Event>) -> Self {
+        match event {
+            Ok(event) => Self::WatchEvent(event.into()),
+            Err(error) => Self::WatchFailure(WatchFailure {
+                file_path_option: error
+                    .paths
+                    .first()
+                    .map(|path| FilePath(path.to_string_lossy().into_owned())),
+                diagnostic: Diagnostic(error.to_string()),
+            }),
+        }
     }
 }
 
@@ -190,7 +176,10 @@ impl Replacing for SessionsWatch {
         // The kernel's watcher is refused only at its own limit, which the
         // first directory is told under.
         let watcher = notify::recommended_watcher(move |event| {
-            let _ = sender.send(owned_word(generation, event));
+            let _ = sender.send(WatchWord {
+                watch_generation: generation,
+                watch_result: event.into(),
+            });
         })
         .map_err(|error| UnwatchableDirectory {
             file_path: first.clone(),
@@ -199,7 +188,11 @@ impl Replacing for SessionsWatch {
         let mut watch = DirectoryWatch {
             generation,
             watcher,
-            placements: directories.0.iter().cloned().map(placed).collect(),
+            placements: directories
+                .0
+                .iter()
+                .map(PlacementPositioning::placed)
+                .collect(),
             watched: BTreeMap::new(),
         };
         match watch.settle().into_iter().next() {
@@ -247,16 +240,16 @@ impl Settling for DirectoryWatch {
         loop {
             let mut moved = false;
             for index in 0..self.placements.len() {
-                let wanted = placed(self.placements[index].file_path.clone());
+                let wanted = self.placements[index].file_path.placed();
                 let Some(resting_path) = wanted.file_path_option.as_ref() else {
                     continue;
                 };
                 let resting = PathBuf::from(&resting_path.0);
-                let reach = reach(&wanted);
+                let reach = wanted.reach();
                 let covered = self
                     .watched
                     .get(&resting)
-                    .is_some_and(|watched| reaches(watched, &reach));
+                    .is_some_and(|watched| watched.reaches(reach.clone()));
                 if wanted == self.placements[index] && covered {
                     continue;
                 }
@@ -349,7 +342,7 @@ impl Settling for DirectoryWatch {
                     let path = Path::new(&file_path.0);
                     self.placements.iter().any(|placement| {
                         let directory = Path::new(&placement.file_path.0);
-                        arrived(placement) && path.starts_with(directory) && path != directory
+                        placement.arrived() && path.starts_with(directory) && path != directory
                     })
                 })
                 .cloned()
@@ -362,7 +355,7 @@ impl Settling for DirectoryWatch {
         AwaitedDirectories(
             self.placements
                 .iter()
-                .filter(|placement| !arrived(placement))
+                .filter(|placement| !placement.arrived())
                 .map(|placement| placement.file_path.clone())
                 .collect(),
         )

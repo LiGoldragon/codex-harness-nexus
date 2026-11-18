@@ -16,6 +16,9 @@ Library
   Opened.Boolean ]
 [ ConfigurationSetting.[ setting.[ Set ] ]
   SessionsDirectoriesSetting.[ sessions_directories.[ SessionsDirectories ] ]
+  PlacementPositioning.[ placed.[ Placement ] ]
+  PlacementState.[ arrived.[ Boolean ] reach.[ Reach ] ]
+  ReachCoverage.[ reaches.{ [ Reach ] [ Boolean ] } ]
   NexusRuntime.[ read_configuration.[ Result<ConfigurationReadout Diagnostic> ]
                   configure!{ [ ConfigurationSetting ]
                               [ Result<Configuration ConfigurationRefusal> ] }
@@ -23,4 +26,6 @@ Library
                                    [ Option<WatchFailure> ] }
                   follow_watch!{ [ WatchWord ] [ Vector<WatchConsequence> ] }
                   open_public!{ [] [ Result<Opened ListenerFailure> ] } ] ]
-[]
+[ FilePath.[ PlacementPositioning ]
+  Placement.[ PlacementState ]
+  Reach.[ ReachCoverage ] ]
