@@ -3,5 +3,6 @@ Memory
   flow:[ FlowId ]
   signal_codex_harness_nexus:[ ByteOffset ParseFailure ] ]
 [ Watch.{ FlowId FilePath ByteOffset }
-  SessionRecord.{ Session Observed Option<Watch> }
+  Rollout.[ Watched.Watch Pending.FilePath Unlocated ]
+  SessionRecord.{ Session Observed Rollout }
   MalformedRecord.{ FlowId ByteOffset ParseFailure } ]
