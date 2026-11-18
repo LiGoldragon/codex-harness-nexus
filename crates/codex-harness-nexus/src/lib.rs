@@ -17,6 +17,7 @@ mod folded;
 mod nexus;
 mod store;
 mod views;
+mod watching;
 
 pub use generated::emission;
 pub use generated::folding::*;
@@ -25,3 +26,4 @@ pub use generated::operation::*;
 pub use generated::runtime::*;
 pub use nexus::HarnessNexus;
 pub use store::{Familial, Opening, Store};
+pub use watching::Watcher;

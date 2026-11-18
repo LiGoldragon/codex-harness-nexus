@@ -18,6 +18,10 @@ Library
               prepare.[ Result<Capacity ReportFailure> ] ]
   Attempting.[ attempt.{ [ Operable ] [ Result<Outcome ReportFailure> ] } ]
   Performing.[ perform.{ [ Operable ] [ Result<Vector<Changed> ReportFailure> ] } ]
+  Waking.[ startup.[ Result<Vector<Operation> ReportFailure> ]
+           woken.{ [ Vector<FilePath> ] [ Result<Vector<Operation> ReportFailure> ] } ]
+  Awaiting.[ open:{ [ Vector<FilePath> ] [ Result<Self Diagnostic> ] }
+             written.[ Result<Vector<FilePath> Diagnostic> ] ]
   Remembering.[ recall.{ [ Sessional ] [ Result<Option<SessionRecord> Diagnostic> ] }
                 recall_all.[ Result<Vector<SessionRecord> Diagnostic> ]
                 commit.{ [ Planned ] [ Result<Vector<Changed> Diagnostic> ] }

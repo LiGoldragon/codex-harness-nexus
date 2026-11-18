@@ -69,6 +69,36 @@ pub trait Performing {
     >;
 }
 #[rustfmt::skip]
+pub trait Waking {
+    fn startup(
+        &self,
+    ) -> std::result::Result<
+        std::vec::Vec<operation::Operation>,
+        signal_codex_harness_nexus::ReportFailure,
+    >;
+    fn woken(
+        &self,
+        input: std::vec::Vec<harness::FilePath>,
+    ) -> std::result::Result<
+        std::vec::Vec<operation::Operation>,
+        signal_codex_harness_nexus::ReportFailure,
+    >;
+}
+#[rustfmt::skip]
+pub trait Awaiting {
+    fn open(
+        input: std::vec::Vec<harness::FilePath>,
+    ) -> std::result::Result<Self, signal_codex_harness_nexus::Diagnostic>
+    where
+        Self: Sized;
+    fn written(
+        &self,
+    ) -> std::result::Result<
+        std::vec::Vec<harness::FilePath>,
+        signal_codex_harness_nexus::Diagnostic,
+    >;
+}
+#[rustfmt::skip]
 pub trait Remembering {
     fn recall<N: Sessional>(
         &self,

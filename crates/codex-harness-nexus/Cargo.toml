@@ -19,6 +19,7 @@ signal-codex-harness-nexus.workspace = true
 meta-signal-codex-harness-nexus.workspace = true
 nexus.workspace = true
 memory-engine.workspace = true
+notify.workspace = true
 rkyv.workspace = true
 tokio.workspace = true
 futures-util.workspace = true
