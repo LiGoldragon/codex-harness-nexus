@@ -71,7 +71,7 @@ impl Familial for StoredConfiguration {
         TableDescriptor::new(
             CONFIGURATION,
             FamilyName::new("codex-harness-configuration"),
-            SchemaHash::for_label("codex-harness-configuration-v1"),
+            SchemaHash::for_label("codex-harness-configuration-v2"),
         )
     }
 }
