@@ -1,9 +1,10 @@
 Library
 [ harness:[ FilePath ]
+  codex_harness_nexus:[ DirectoryWatch SessionsWatch ]
   operation:Operation
   runtime:[ Operable Performed ]
   signal:Stream
-  signal_codex_harness_nexus:[ Changed Hook Observations ReportFailure ]
+  signal_codex_harness_nexus:[ Changed Hook Observations ReportFailure MemoryFault ]
   meta_signal_codex_harness_nexus:[ Configuration ConfigurationReadout
                                     ConfigurationChange AwaitedDirectories
                                     ConfigurationRefusal Set SessionsDirectories
@@ -25,11 +26,16 @@ Library
   WatchSessionsRequest.{ SessionsDirectories }
   FollowWatchRequest.{ WatchWord }
   OpenPublicRequest.{}
+  InitializeRequest.{}
   PerformRequest.{ Operation }
   ReportRequest.{ Hook }
   SubscribeObservationsRequest.{}
   SubscribeConfigurationRequest.{}
-  ActorFailure.{ Diagnostic } ]
+  ActorFailure.{ Diagnostic }
+  NexusControlFailure.[ ActorUnavailable.ActorFailure
+                        ListenerFailure
+                        UnwatchableDirectory
+                        MemoryFault ] ]
 [ ConfigurationSetting.[ setting.[ Set ] ]
   SessionsDirectoriesSetting.[ sessions_directories.[ SessionsDirectories ] ]
   PlacementPositioning.[ placed.[ Placement ] ]
@@ -39,32 +45,48 @@ Library
               forget!{ [ WatchEvent ] [] }
               written.{ [ WatchEvent ] [ Vector<FilePath> ] }
               awaited.[ AwaitedDirectories ] ]
+  SessionsWatching.[ opened!{ [ SessionsDirectoriesSetting ]
+                                [ Result<Option<DirectoryWatch> UnwatchableDirectory> ] }
+                     replaced!{ [ Option<DirectoryWatch> ] [] }
+                     awaited.[ AwaitedDirectories ] ]
   PublicOpening.[ open_public.[ Result<Opened ListenerFailure> ] ]
   WatchWordInput.[ watch_word.[ WatchWord ] ]
   Reportable.[ hook.[ Hook ] ]
-  ConfigurationReading.[ readout.[ Result<ConfigurationReadout Diagnostic> ] ]
-  NexusPort.[ read_configuration.[ Result<ConfigurationReadout Diagnostic> ]
+  ConfigurationReading.[ readout.[ Result<ConfigurationReadout MemoryFault> ] ]
+  NexusPort.[ read_configuration.[ Result<ConfigurationReadout ConfigurationRefusal> ]
               configure.{ [ ConfigurationSetting ]
                           [ Result<Configuration ConfigurationRefusal> ] }
-              watch_sessions.{ [ SessionsDirectoriesSetting ] [ Option<WatchFailure> ] }
-              follow_watch.{ [ WatchWordInput ] [ Vector<WatchConsequence> ] }
-              open_public.[ Result<Opened ListenerFailure> ]
+              watch_sessions.{ [ SessionsDirectoriesSetting ]
+                               [ Result<Opened NexusControlFailure> ] }
+              follow_watch.{ [ WatchWordInput ]
+                             [ Result<Vector<WatchConsequence> ActorFailure> ] }
+              open_public.[ Result<Opened NexusControlFailure> ]
+              initialize.[ Result<Opened NexusControlFailure> ]
               perform.{ [ Operable ] [ Result<Performed ReportFailure> ] }
               report.{ [ Reportable ] [ Result<Performed ReportFailure> ] }
               subscribe_observations.[ Result<Stream<Observations Changed> ReportFailure> ]
               subscribe_configuration.[ Result<Stream<ConfigurationReadout ConfigurationChange>
                                               ConfigurationRefusal> ] ]
-  NexusRuntime.[ read_configuration.[ Result<ConfigurationReadout Diagnostic> ]
+  NexusRuntime.[ read_configuration.[ Result<ConfigurationReadout MemoryFault> ]
                   configure!{ [ ConfigurationSetting ]
                               [ Result<Configuration ConfigurationRefusal> ] }
                   watch_sessions!{ [ SessionsDirectoriesSetting ]
-                                   [ Option<WatchFailure> ] }
+                                   [ Result<Opened UnwatchableDirectory> ] }
                   follow_watch!{ [ WatchWord ] [ Vector<WatchConsequence> ] }
-                  open_public!{ [] [ Result<Opened ListenerFailure> ] } ] ]
+                  open_public!{ [] [ Result<Opened ListenerFailure> ] }
+                  initialize!{ [] [ Result<Opened NexusControlFailure> ] }
+                  perform!{ [ Operable ] [ Result<Performed ReportFailure> ] }
+                  report!{ [ Reportable ] [ Result<Performed ReportFailure> ] }
+                  subscribe_observations!{ []
+                    [ Result<Stream<Observations Changed> ReportFailure> ] }
+                  subscribe_configuration!{ []
+                    [ Result<Stream<ConfigurationReadout ConfigurationChange>
+                               ConfigurationRefusal> ] } ] ]
 [ FilePath.[ PlacementPositioning ]
   Set.[ ConfigurationSetting ]
   SessionsDirectories.[ SessionsDirectoriesSetting ]
   WatchWord.[ WatchWordInput ]
   Hook.[ Reportable ]
   Placement.[ PlacementState ]
-  Reach.[ ReachCoverage ] ]
+  Reach.[ ReachCoverage ]
+  SessionsWatch.[ SessionsWatching ] ]

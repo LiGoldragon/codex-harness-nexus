@@ -50,9 +50,9 @@ pub trait NamingPaths {
 }
 #[rustfmt::skip]
 pub trait Observing {
-    fn publish(&self, input: std::vec::Vec<signal_codex_harness_nexus::Changed>);
+    fn publish(&mut self, input: std::vec::Vec<signal_codex_harness_nexus::Changed>);
     fn prepare(
-        &self,
+        &mut self,
     ) -> std::result::Result<
         meta_signal_codex_harness_nexus::Capacity,
         signal_codex_harness_nexus::ReportFailure,
@@ -61,7 +61,7 @@ pub trait Observing {
 #[rustfmt::skip]
 pub trait Attempting {
     fn attempt<N: Operable>(
-        &self,
+        &mut self,
         input: N,
     ) -> std::result::Result<
         operation::Outcome,
@@ -71,20 +71,20 @@ pub trait Attempting {
 #[rustfmt::skip]
 pub trait Performing {
     fn perform<N: Operable>(
-        &self,
+        &mut self,
         input: N,
     ) -> std::result::Result<Performed, signal_codex_harness_nexus::ReportFailure>;
 }
 #[rustfmt::skip]
 pub trait Waking {
     fn startup(
-        &self,
+        &mut self,
     ) -> std::result::Result<
         std::vec::Vec<operation::Operation>,
         signal_codex_harness_nexus::ReportFailure,
     >;
     fn woken(
-        &self,
+        &mut self,
         input: std::vec::Vec<harness::FilePath>,
     ) -> std::result::Result<
         std::vec::Vec<operation::Operation>,
@@ -98,33 +98,33 @@ pub trait Remembering {
         input: N,
     ) -> std::result::Result<
         std::option::Option<memory::SessionRecord>,
-        signal_codex_harness_nexus::Diagnostic,
+        signal_codex_harness_nexus::MemoryFault,
     >;
     fn recall_all(
         &self,
     ) -> std::result::Result<
         std::vec::Vec<memory::SessionRecord>,
-        signal_codex_harness_nexus::Diagnostic,
+        signal_codex_harness_nexus::MemoryFault,
     >;
     fn commit<N: Planned>(
-        &self,
+        &mut self,
         input: N,
     ) -> std::result::Result<
         std::vec::Vec<signal_codex_harness_nexus::Changed>,
-        signal_codex_harness_nexus::Diagnostic,
+        signal_codex_harness_nexus::MemoryFault,
     >;
     fn configuration(
         &self,
     ) -> std::result::Result<
         meta_signal_codex_harness_nexus::Configuration,
-        signal_codex_harness_nexus::Diagnostic,
+        signal_codex_harness_nexus::MemoryFault,
     >;
     fn configure<N: Settable>(
-        &self,
+        &mut self,
         input: N,
     ) -> std::result::Result<
         meta_signal_codex_harness_nexus::Configuration,
-        signal_codex_harness_nexus::Diagnostic,
+        signal_codex_harness_nexus::MemoryFault,
     >;
 }
 #[rustfmt::skip]

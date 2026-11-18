@@ -4,7 +4,7 @@ Library
   memory:SessionRecord
   harness:[ Session FilePath ]
   nexus_exchange:LaneFailure
-  signal_codex_harness_nexus:[ Hook ReportFailure Changed Diagnostic ]
+  signal_codex_harness_nexus:[ Hook ReportFailure Changed Diagnostic MemoryFault ]
   meta_signal_codex_harness_nexus:[ Set Configuration FlowsRoot IdentityProducer
                                     SessionsDirectories Capacity ] ]
 [ ReadyConfiguration.{ FlowsRoot IdentityProducer SessionsDirectories
@@ -17,17 +17,17 @@ Library
   Settable.[ setting.[ Set ] ]
   Readying.[ ready.[ Option<ReadyConfiguration> ] ]
   NamingPaths.[ paths.[ Vector<FilePath> ] ]
-  Observing.[ publish.{ [ Vector<Changed> ] [] }
-              prepare.[ Result<Capacity ReportFailure> ] ]
-  Attempting.[ attempt.{ [ Operable ] [ Result<Outcome ReportFailure> ] } ]
-  Performing.[ perform.{ [ Operable ] [ Result<Performed ReportFailure> ] } ]
-  Waking.[ startup.[ Result<Vector<Operation> ReportFailure> ]
-           woken.{ [ Vector<FilePath> ] [ Result<Vector<Operation> ReportFailure> ] } ]
-  Remembering.[ recall.{ [ Sessional ] [ Result<Option<SessionRecord> Diagnostic> ] }
-                recall_all.[ Result<Vector<SessionRecord> Diagnostic> ]
-                commit.{ [ Planned ] [ Result<Vector<Changed> Diagnostic> ] }
-                configuration.[ Result<Configuration Diagnostic> ]
-                configure.{ [ Settable ] [ Result<Configuration Diagnostic> ] } ] ]
+  Observing.[ publish!{ [ Vector<Changed> ] [] }
+              prepare!{ [] [ Result<Capacity ReportFailure> ] } ]
+  Attempting.[ attempt!{ [ Operable ] [ Result<Outcome ReportFailure> ] } ]
+  Performing.[ perform!{ [ Operable ] [ Result<Performed ReportFailure> ] } ]
+  Waking.[ startup!{ [] [ Result<Vector<Operation> ReportFailure> ] }
+           woken!{ [ Vector<FilePath> ] [ Result<Vector<Operation> ReportFailure> ] } ]
+  Remembering.[ recall.{ [ Sessional ] [ Result<Option<SessionRecord> MemoryFault> ] }
+                recall_all.[ Result<Vector<SessionRecord> MemoryFault> ]
+                commit!{ [ Planned ] [ Result<Vector<Changed> MemoryFault> ] }
+                configuration.[ Result<Configuration MemoryFault> ]
+                configure!{ [ Settable ] [ Result<Configuration MemoryFault> ] } ] ]
 [ Operation.[ Operable ]
   Hook.[ Operable Sessional ]
   EventBatch.[ Sessional ]
