@@ -8,7 +8,7 @@
       fmt = pkgs.runCommand "codex-harness-nexus-fmt" { nativeBuildInputs = [ toolchain ]; } ''
         cd ${./crates}
         rustfmt --edition 2024 --check \
-          codex-harness-nexus/src/{lib,folding,nexus,store,views}.rs \
+          codex-harness-nexus/src/{lib,folded,nexus,store,views}.rs \
           codex-harness-translator/src/{lib,emitting,rollout}.rs
         touch "$out"
       '';

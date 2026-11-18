@@ -13,7 +13,7 @@ mod generated {
     pub mod operation;
     pub mod runtime;
 }
-mod folding;
+mod folded;
 mod nexus;
 mod store;
 mod views;

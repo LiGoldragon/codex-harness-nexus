@@ -74,7 +74,7 @@ where
         match input.operation() {
             Operation::Reporting(hook) => {
                 let session = hook.session();
-                let record = self.store.recall(&session).map_err(unrecorded)?;
+                let record = self.store.recall(session.clone()).map_err(unrecorded)?;
                 let flow_id = match (&record, &hook) {
                     (Some(record), _) => record.observed.flow_id.clone(),
                     (None, Hook::SessionStart(_)) => match (ClaimIdentity_Data {
@@ -208,7 +208,7 @@ where
                 }
                 _ => None,
             };
-            let record = self.store.recall(&batch).map_err(unrecorded)?;
+            let record = self.store.recall(batch.session()).map_err(unrecorded)?;
             let plan = batch.fold(record).map_err(fold_refused)?;
             let changes = self.store.commit(plan).map_err(unrecorded)?;
             self.publish(changes.clone());
@@ -304,7 +304,7 @@ impl<Translator> meta_signal_codex_harness_nexus::Answering for HarnessNexus<Tra
             return refused(ConfigurationRefusal::InvalidPath(path));
         }
         let _serial = locked(&self.serial);
-        if let Err(diagnostic) = self.store.configure(set) {
+        if let Err(diagnostic) = self.store.configure(set.clone()) {
             return refused(ConfigurationRefusal::Unrecorded(
                 meta_signal_codex_harness_nexus::Diagnostic(diagnostic.0),
             ));
