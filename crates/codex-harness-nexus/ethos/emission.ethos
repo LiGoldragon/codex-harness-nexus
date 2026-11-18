@@ -1,0 +1,15 @@
+Emission
+[ harness:[ Session FilePath ]
+  flow:[ FlowId ]
+  memory:Watch
+  signal_codex_harness_nexus:[ IdentityFailure Observation ByteOffset Diagnostic ] ]
+[ FindRollout.Session
+  ClaimIdentity.{ Session FlowsRoot.String IdentityProducer.String }
+  ReadRollout.Watch
+  IdentifyRollout.FilePath ]
+[ RolloutFinding.[ Found.FilePath Unfound ]
+  IdentityClaim.[ Claimed.FlowId Unclaimed.IdentityFailure ]
+  RolloutReading.[ Read.{ Vector<Observation> ByteOffset }
+                   Unreadable.Diagnostic ]
+  RolloutIdentity.[ Identified.Session Unidentified ] ]
+[]

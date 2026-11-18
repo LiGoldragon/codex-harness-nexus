@@ -36,3 +36,9 @@ pub struct MalformedRecord {
     pub byte_offset: signal_codex_harness_nexus::ByteOffset,
     pub parse_failure: signal_codex_harness_nexus::ParseFailure,
 }
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct StoredConfiguration {
+    pub configuration: meta_signal_codex_harness_nexus::Configuration,
+}

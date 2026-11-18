@@ -1,0 +1,25 @@
+[package]
+name = "codex-harness-translator"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/LiGoldragon/codex-harness-nexus"
+publish = false
+
+[features]
+default = []
+datom = ["dep:datom-codec", "dep:protos", "codex-harness-nexus/datom", "harness/datom", "flow/datom", "signal-codex-harness-nexus/datom"]
+
+[dependencies]
+codex-harness-nexus = { path = "../codex-harness-nexus" }
+harness.workspace = true
+flow.workspace = true
+signal-codex-harness-nexus.workspace = true
+rkyv.workspace = true
+serde_json.workspace = true
+datom-codec = { workspace = true, optional = true }
+protos = { workspace = true, optional = true }
+
+[lints]
+workspace = true

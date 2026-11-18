@@ -1,0 +1,31 @@
+Library
+[ operation:[ Operation Outcome EventBatch ]
+  folding:FoldPlan
+  memory:SessionRecord
+  harness:[ Session FilePath ]
+  signal_codex_harness_nexus:[ Hook ReportFailure Changed Diagnostic ]
+  meta_signal_codex_harness_nexus:[ Set Configuration FlowsRoot IdentityProducer
+                                    SessionsDirectories ThreadDatabases Capacity ] ]
+[ ReadyConfiguration.{ FlowsRoot IdentityProducer SessionsDirectories
+                       ThreadDatabases Capacity } ]
+[ Sessional.[ session.[ Session ] ]
+  Operable.[ operation.[ Operation ] ]
+  Planned.[ plan.[ FoldPlan ] ]
+  Settable.[ setting.[ Set ] ]
+  Readying.[ ready.[ Option<ReadyConfiguration> ] ]
+  NamingPaths.[ paths.[ Vector<FilePath> ] ]
+  Observing.[ publish.{ [ Vector<Changed> ] [] }
+              prepare.[ Result<Capacity ReportFailure> ] ]
+  Attempting.[ attempt.{ [ Operable ] [ Result<Outcome ReportFailure> ] } ]
+  Performing.[ perform.{ [ Operable ] [ Result<Vector<Changed> ReportFailure> ] } ]
+  Remembering.[ recall.{ [ Sessional ] [ Result<Option<SessionRecord> Diagnostic> ] }
+                recall_all.[ Result<Vector<SessionRecord> Diagnostic> ]
+                commit.{ [ Planned ] [ Result<Vector<Changed> Diagnostic> ] }
+                configuration.[ Result<Configuration Diagnostic> ]
+                configure.{ [ Settable ] [ Result<Configuration Diagnostic> ] } ] ]
+[ Operation.[ Operable ]
+  Hook.[ Operable Sessional ]
+  EventBatch.[ Sessional ]
+  FoldPlan.[ Planned ]
+  Set.[ Settable NamingPaths ]
+  Configuration.[ Readying ] ]

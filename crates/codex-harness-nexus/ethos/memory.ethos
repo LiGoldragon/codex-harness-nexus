@@ -1,8 +1,10 @@
 Memory
 [ harness:[ FilePath Session Observed ]
   flow:[ FlowId ]
-  signal_codex_harness_nexus:[ ByteOffset ParseFailure ] ]
+  signal_codex_harness_nexus:[ ByteOffset ParseFailure ]
+  meta_signal_codex_harness_nexus:Configuration ]
 [ Watch.{ FlowId FilePath ByteOffset }
   Rollout.[ Watched.Watch Pending.FilePath Unlocated ]
   SessionRecord.{ Session Observed Rollout }
-  MalformedRecord.{ FlowId ByteOffset ParseFailure } ]
+  MalformedRecord.{ FlowId ByteOffset ParseFailure }
+  StoredConfiguration.{ Configuration } ]
