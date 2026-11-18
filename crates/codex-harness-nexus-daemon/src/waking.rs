@@ -75,11 +75,13 @@ impl ReadyOpening for Daemon {
         if serving.opened.get().is_some() {
             return Ok(());
         }
+        // Open only once the watch is open: a watch that fails leaves the
+        // Nexus unopened, and the staged socket is dropped with its file.
         let listener = serving.listeners.stage_public()?;
+        self.watch(ready.sessions_directories.0)?;
         if serving.opened.set(()).is_err() {
             return Ok(());
         }
-        self.watch(ready.sessions_directories.0)?;
         serving.listeners.publish_public(listener);
         Ok(())
     }
