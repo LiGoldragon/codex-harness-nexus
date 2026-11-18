@@ -30,7 +30,7 @@ pub use generated::folding::*;
 pub use generated::memory::*;
 pub use generated::operation::*;
 pub use generated::runtime::*;
-pub use naming::CodexHarness;
+pub use naming::{CodexHarness, MemoryPlacing};
 pub use nexus::{HarnessNexus, Locking};
 pub use store::{Familial, Opening, Store};
 pub use watching::Watcher;

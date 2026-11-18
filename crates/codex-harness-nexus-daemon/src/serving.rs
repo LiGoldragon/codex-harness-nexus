@@ -2,13 +2,15 @@
 //! is served within, its meta answer and its public answer. Its name is the
 //! core's, which its translator names it by too.
 
-use std::path::Path;
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
-use codex_harness_nexus::{CodexHarness, HarnessNexus, Opening as _, Remembering as _, Store};
+use codex_harness_nexus::{
+    CodexHarness, HarnessNexus, MemoryPlacing as _, Opening as _, Remembering as _, Store,
+};
 use meta_signal_codex_harness_nexus as meta;
-use nexus_exchange::ValidAdmission;
+use nexus_exchange::{Named as _, ValidAdmission};
 use nexus_serving::{
     ConnectionServing, EmissionLane, Listeners, Listening, MetaAnswering, PeerAdmitting,
     PublicConnection, PublicServing, Reply, SubscriptionClosing, TransportBounded,
@@ -20,9 +22,6 @@ use signal_codex_harness_nexus::{Answer, Answerable as _, Changed, Input, Observ
 
 use crate::emitting::PairedTranslator;
 use crate::waking::ReadyOpening as _;
-
-/// The file in the place's state directory that holds the Nexus's Memory.
-const MEMORY_FILE: &str = "codex-harness.memory";
 
 /// The bounds the public socket is served within: the admission the pair
 /// launcher handed the Nexus.
@@ -69,11 +68,35 @@ pub trait DaemonStarting: Sized {
         translator: PeerIdentity,
     ) -> Result<Self, Box<dyn std::error::Error>>;
 
-    /// Serves until a listener fails: the meta socket on a thread of its
-    /// own, the public socket's connections on `runtime`. A configuration
-    /// already ready opens the public socket at once.
+    /// Serves until a listener fails, and answers with that failure: the
+    /// meta socket and the public accepting each on a thread of its own,
+    /// the public socket's connections on `runtime`. A configuration already
+    /// ready opens the public socket at once.
     fn serve(self, runtime: tokio::runtime::Handle) -> Result<(), Box<dyn std::error::Error>>;
 }
+
+/// The listener that could no longer accept, which ends the daemon.
+#[derive(Debug)]
+pub enum ListenerFailure {
+    /// The meta socket's listener, its error as it was told.
+    Meta(signal_codex_harness_nexus::Diagnostic),
+    /// The public socket's listener.
+    Public(std::io::Error),
+}
+
+impl std::fmt::Display for ListenerFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let title = CodexHarness::title().0;
+        match self {
+            Self::Meta(diagnostic) => {
+                write!(formatter, "{title} meta listener failed: {}", diagnostic.0)
+            }
+            Self::Public(error) => write!(formatter, "{title} public listener failed: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for ListenerFailure {}
 
 impl DaemonStarting for Daemon {
     fn bind(
@@ -83,8 +106,8 @@ impl DaemonStarting for Daemon {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let listeners = Listeners::<CodexHarness>::bind(place, admission, translator)?;
         let lane = EmissionLane::from(listeners.paths().translator.clone());
-        let store = Store::open(&Path::new(&place.state.0).join(MEMORY_FILE))
-            .map_err(|diagnostic| diagnostic.0)?;
+        let store =
+            Store::open(&place.memory_path::<CodexHarness>()).map_err(|diagnostic| diagnostic.0)?;
         Ok(Self {
             serving: Arc::new(Serving {
                 nexus: HarnessNexus {
@@ -104,26 +127,38 @@ impl DaemonStarting for Daemon {
 
     fn serve(self, runtime: tokio::runtime::Handle) -> Result<(), Box<dyn std::error::Error>> {
         self.open()?;
+        let (failed, failure) = mpsc::channel();
         let meta = self.clone();
+        let meta_failed = failed.clone();
         std::thread::spawn(move || {
-            loop {
+            let error = loop {
                 if let Err(error) = meta.serving.listeners.serve_next_meta(&meta) {
-                    eprintln!("Codex Harness Nexus meta listener failed: {error}");
-                    std::process::exit(1);
+                    break error;
                 }
-            }
+            };
+            let diagnostic = signal_codex_harness_nexus::Diagnostic(error.to_string());
+            let _ = meta_failed.send(ListenerFailure::Meta(diagnostic));
         });
         // The public socket admits the translator alone, whose authority is
         // the unit this Nexus's PeerAdmitting names.
-        loop {
-            let accepted = self.serving.listeners.accept_public(&self)?;
-            runtime.spawn(PublicConnection::<Daemon>::serve(
-                accepted.stream,
-                (),
-                self.clone(),
-                Arc::clone(&self.serving.bounds),
-            ));
-        }
+        let public = self;
+        std::thread::spawn(move || {
+            let error = loop {
+                match public.serving.listeners.accept_public(&public) {
+                    Ok(accepted) => {
+                        runtime.spawn(PublicConnection::<Daemon>::serve(
+                            accepted.stream,
+                            (),
+                            public.clone(),
+                            Arc::clone(&public.serving.bounds),
+                        ));
+                    }
+                    Err(error) => break error,
+                }
+            };
+            let _ = failed.send(ListenerFailure::Public(error));
+        });
+        Err(Box::new(failure.recv()?))
     }
 }
 

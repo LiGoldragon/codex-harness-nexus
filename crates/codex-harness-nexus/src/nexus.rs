@@ -7,7 +7,7 @@ use std::sync::{Mutex, MutexGuard};
 
 use harness::{FilePath, Observable, Session};
 use meta_signal_codex_harness_nexus::{Configuration, ConfigurationRefusal, Set};
-use nexus::{Capacity, Publisher, Publishing};
+use nexus::{Capacity, CapacityRefusal, Publisher, Publishing};
 use signal_codex_harness_nexus::{
     Changed, Diagnostic, Hook, Observation, Observations, Output, ReportFailure,
 };
@@ -330,20 +330,25 @@ impl<Translator> meta_signal_codex_harness_nexus::Answering for HarnessNexus<Tra
             ));
         }
         let _serial = self.serial.locked();
+        // A capacity takes effect on the open publishers before it is kept,
+        // so a capacity they refuse is refused whole and never recorded.
+        if let Set::SubscriberCapacity(capacity) = set {
+            let refused = |_: CapacityRefusal| {
+                MetaOutput::ConfigureRefused(ConfigurationRefusal::InvalidCapacity(*capacity))
+            };
+            if let Some(publisher) = self.observations.locked().as_mut() {
+                publisher.resize(Capacity(capacity.0)).map_err(refused)?;
+            }
+            if let Some(publisher) = self.configurations.locked().as_mut() {
+                publisher.resize(Capacity(capacity.0)).map_err(refused)?;
+            }
+        }
         if let Err(diagnostic) = self.store.configure(set.clone()) {
             return Err(MetaOutput::ConfigureRefused(
                 ConfigurationRefusal::Unrecorded(meta_signal_codex_harness_nexus::Diagnostic(
                     diagnostic.0,
                 )),
             ));
-        }
-        if let Set::SubscriberCapacity(capacity) = set {
-            if let Some(publisher) = self.observations.locked().as_mut() {
-                let _ = publisher.resize(Capacity(capacity.0));
-            }
-            if let Some(publisher) = self.configurations.locked().as_mut() {
-                let _ = publisher.resize(Capacity(capacity.0));
-            }
         }
         if let Some(publisher) = self.configurations.locked().as_ref() {
             publisher.publish(set.clone());
