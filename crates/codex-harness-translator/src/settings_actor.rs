@@ -53,7 +53,15 @@ impl TryFrom<&TranslatorBootstrap> for TranslatorSettingsActor {
     type Error = TranslatorBootstrapFailure;
 
     fn try_from(bootstrap: &TranslatorBootstrap) -> Result<Self, Self::Error> {
-        let text_limits = bootstrap.text_limits.clone();
+        Self::try_from(&bootstrap.text_limits)
+    }
+}
+
+impl TryFrom<&TextLimits> for TranslatorSettingsActor {
+    type Error = TranslatorBootstrapFailure;
+
+    fn try_from(text_limits: &TextLimits) -> Result<Self, Self::Error> {
+        let text_limits = text_limits.clone();
         text_limits.valid_budget()?;
 
         let runtime = Builder::new_multi_thread().build().map_err(|error| {

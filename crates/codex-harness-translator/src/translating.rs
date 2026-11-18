@@ -10,27 +10,14 @@ use shared_translator::Caller;
 use signal::Frame;
 use signal_codex_harness_nexus::{Input, Output};
 use translator_serving::{
-    EmissionAnswering, MetaTranslating, NexusFailure, PublicTranslating, Settling, TextBudgeting,
-    Translator, TranslatorBootstrap, ValidTextBudget,
+    EmissionAnswering, MetaTranslating, NexusFailure, PublicTranslating, Settling, Translator,
+    TranslatorBootstrap, ValidTextBudget,
 };
 
 use crate::settings_actor::{
-    BudgetMerging, Limiting, MetaBudgeting, SettingsReading, SettingsWriting, TextLimitsValidating,
+    BudgetMerging, MetaBudgeting, SettingsReading, SettingsWriting, TextLimitsValidating,
     TranslatorBootstrapFailure, TranslatorSettingsActor,
 };
-
-/// The translator's settings: the budget every ordinary request's text is
-/// read within, the translator's own setting on the meta socket.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TranslatorSettings {
-    pub text_budget: ValidTextBudget,
-}
-
-impl TextBudgeting for TranslatorSettings {
-    fn text_budget(&self) -> ValidTextBudget {
-        self.text_budget
-    }
-}
 
 /// The Codex Harness Nexus's translator process: it speaks text for the
 /// Nexus, and carries every emission of the Nexus into the world. Its
@@ -56,15 +43,14 @@ impl TryFrom<&TranslatorBootstrap> for CodexHarnessTranslator {
 
 impl Translator for CodexHarnessTranslator {
     type Component = CodexHarness;
-    type Ready = TranslatorSettings;
+    type Ready = ValidTextBudget;
 
-    fn ready(&self) -> Option<TranslatorSettings> {
+    fn ready(&self) -> Option<ValidTextBudget> {
         // The serving contract has only Option for readiness, so actor
         // unavailability remains not-ready here rather than a success or a
         // fabricated text budget.
         let settings = self.settings.current_settings().ok()?;
-        let text_budget = settings.text_limits.valid_budget().ok()?;
-        Some(TranslatorSettings { text_budget })
+        settings.text_limits.valid_budget().ok()
     }
 }
 
@@ -128,6 +114,12 @@ impl MetaTranslating for CodexHarnessTranslator {
     }
 
     fn meta_answered(&self, response: meta::Output) -> Result<meta::Output, NexusFailure> {
+        if !matches!(
+            &response,
+            meta::Output::Subscribed(Frame::Opened(_) | Frame::Lagged(_))
+        ) {
+            return Ok(response);
+        }
         let settings = match self.settings.current_settings() {
             Ok(settings) => settings,
             Err(failure) => {
@@ -178,7 +170,7 @@ impl EmissionAnswering for CodexHarnessTranslator {
     type Emission = Emission;
     type Outcome = Outcome;
 
-    fn emitted(&self, _ready: &TranslatorSettings, emission: Emission) -> Outcome {
+    fn emitted(&self, _ready: &ValidTextBudget, emission: Emission) -> Outcome {
         match emission {
             Emission::FindRollout(session) => Outcome::RolloutFinding(session.emit(self)),
             Emission::ClaimIdentity(claim) => Outcome::IdentityClaim(claim.emit(self)),
