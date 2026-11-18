@@ -9,7 +9,6 @@ publish = false
 
 [dependencies]
 codex-harness-nexus = { path = "../codex-harness-nexus" }
-codex-harness-translator = { path = "../codex-harness-translator" }
 harness.workspace = true
 signal.workspace = true
 signal-codex-harness-nexus.workspace = true

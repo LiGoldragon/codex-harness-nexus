@@ -7,19 +7,47 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/LiGoldragon/codex-harness-nexus"
 publish = false
 
+# Reading and writing text is the translator's: `text` turns on the shared
+# serving's lanes, the pair launcher and the CLIs, which are built only with
+# it.
 [features]
 default = []
 datom = ["dep:datom-codec", "dep:protos", "codex-harness-nexus/datom", "harness/datom", "flow/datom", "signal-codex-harness-nexus/datom"]
+text = ["datom", "meta-signal-codex-harness-nexus/datom", "shared-translator/text", "translator-serving/text"]
 
 [dependencies]
 codex-harness-nexus = { path = "../codex-harness-nexus" }
 harness.workspace = true
 flow.workspace = true
 signal-codex-harness-nexus.workspace = true
+meta-signal-codex-harness-nexus.workspace = true
+shared-translator.workspace = true
+translator-client.workspace = true
+translator-serving.workspace = true
 rkyv.workspace = true
 serde_json.workspace = true
 datom-codec = { workspace = true, optional = true }
 protos = { workspace = true, optional = true }
+
+[[bin]]
+name = "codex-harness"
+path = "src/bin/codex-harness.rs"
+required-features = ["text"]
+
+[[bin]]
+name = "codex-harness-meta"
+path = "src/bin/codex-harness-meta.rs"
+required-features = ["text"]
+
+[[bin]]
+name = "codex-harness-translator"
+path = "src/bin/codex-harness-translator.rs"
+required-features = ["text"]
+
+[[bin]]
+name = "codex-harness-pair"
+path = "src/bin/codex-harness-pair.rs"
+required-features = ["text"]
 
 [lints]
 workspace = true

@@ -12,6 +12,8 @@ nexus = { git = "https://github.com/LiGoldragon/nexus", rev = "d020a62", default
 nexus-exchange = { git = "https://github.com/LiGoldragon/nexus", rev = "8976179c940b4a822990f519515084cb62d3f908", default-features = false }
 nexus-serving = { git = "https://github.com/LiGoldragon/nexus", rev = "8976179c940b4a822990f519515084cb62d3f908", default-features = false }
 shared-translator = { package = "translator", git = "https://github.com/LiGoldragon/translator", rev = "29601a3", default-features = false, features = ["unix"] }
+translator-client = { git = "https://github.com/LiGoldragon/translator", rev = "fc037957ca0887165fee69abbc0eea5169b5980a", default-features = false }
+translator-serving = { git = "https://github.com/LiGoldragon/translator", rev = "fc037957ca0887165fee69abbc0eea5169b5980a", default-features = false }
 memory-engine = { git = "https://github.com/LiGoldragon/memory-engine", rev = "3261088" }
 rkyv = { version = "0.8", default-features = false, features = ["std", "bytecheck", "little_endian", "pointer_width_32", "unaligned"] }
 datom-codec = { git = "https://github.com/LiGoldragon/datom-codec", rev = "09a0526" }

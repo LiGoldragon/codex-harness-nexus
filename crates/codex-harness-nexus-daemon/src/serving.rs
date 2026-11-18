@@ -7,18 +7,18 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use codex_harness_nexus::{CodexHarness, HarnessNexus, Opening as _, Remembering as _, Store};
-use codex_harness_translator::Translator;
 use meta_signal_codex_harness_nexus as meta;
 use nexus_exchange::ValidAdmission;
 use nexus_serving::{
-    ConnectionServing, Listeners, Listening, MetaAnswering, PeerAdmitting, PublicConnection,
-    PublicServing, Reply, SubscriptionClosing, TransportBounded,
+    ConnectionServing, EmissionLane, Listeners, Listening, MetaAnswering, PeerAdmitting,
+    PublicConnection, PublicServing, Reply, SubscriptionClosing, TransportBounded,
 };
 use shared_translator::placement::Place;
 use shared_translator::{Caller, PeerIdentity};
 use signal::{Frame, FrameCapacity};
 use signal_codex_harness_nexus::{Answer, Answerable as _, Changed, Input, Observations, Output};
 
+use crate::emitting::PairedTranslator;
 use crate::waking::ReadyOpening as _;
 
 /// The file in the place's state directory that holds the Nexus's Memory.
@@ -40,11 +40,11 @@ impl TransportBounded for Bounds {
     }
 }
 
-/// Everything one served Nexus holds: the Nexus itself, its listeners, its
-/// bounds, whether its public socket is open, and which watch of its
-/// sessions directories is current.
+/// Everything one served Nexus holds: the Nexus itself, its emissions carried
+/// to its paired translator, its listeners, its bounds, whether its public
+/// socket is open, and which watch of its sessions directories is current.
 pub struct Serving {
-    pub nexus: HarnessNexus<Translator>,
+    pub nexus: HarnessNexus<PairedTranslator>,
     pub listeners: Listeners<CodexHarness>,
     pub bounds: Arc<Bounds>,
     pub opened: OnceLock<()>,
@@ -60,20 +60,22 @@ pub struct Daemon {
 
 impl Daemon {
     /// Binds the meta socket in `place` and opens the Memory in its state
-    /// directory; the public socket waits for a ready configuration.
+    /// directory; the public socket waits for a ready configuration. Every
+    /// emission goes to the translator's public socket in the same place.
     pub fn bind(
         place: &Place,
         admission: ValidAdmission,
         translator: PeerIdentity,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let listeners = Listeners::<CodexHarness>::bind(place, admission, translator)?;
+        let lane = EmissionLane::from(listeners.paths().translator.clone());
         let store = Store::open(&Path::new(&place.state.0).join(MEMORY_FILE))
             .map_err(|diagnostic| diagnostic.0)?;
         Ok(Self {
             serving: Arc::new(Serving {
                 nexus: HarnessNexus {
                     store,
-                    translator: Translator,
+                    translator: PairedTranslator { lane, admission },
                     serial: Mutex::new(()),
                     observations: Mutex::new(None),
                     configurations: Mutex::new(None),

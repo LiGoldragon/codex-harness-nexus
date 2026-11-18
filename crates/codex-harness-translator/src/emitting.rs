@@ -1,6 +1,7 @@
-//! Each emission of the Codex Harness Nexus, carried into the world: the
-//! identity producer run, the rollout read from its offset to its last whole
-//! row, and a rollout's first row read for its session.
+//! Each emission of the Codex Harness Nexus, carried into the world by its
+//! translator process: the identity producer run, the rollout read from its
+//! offset to its last whole row, and a rollout's first row read for its
+//! session.
 
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
@@ -19,25 +20,29 @@ use signal_codex_harness_nexus::{
 };
 
 use crate::generated::rollout::{Interpretable, RowText};
+use crate::translating::CodexHarnessTranslator;
 
-/// The translator's emission side. It holds no state of its own: every
-/// emission carries what its call needs.
-pub struct Translator;
+/// A failure as the Nexus is told it: its text.
+pub trait Diagnosing {
+    fn diagnostic(&self) -> Diagnostic;
+}
 
-fn diagnostic(error: impl std::fmt::Display) -> Diagnostic {
-    Diagnostic(error.to_string())
+impl<Failure: std::fmt::Display> Diagnosing for Failure {
+    fn diagnostic(&self) -> Diagnostic {
+        Diagnostic(self.to_string())
+    }
 }
 
 /// Codex's own thread database is not read yet: a session whose hook names
 /// no path waits for its rollout to appear in a sessions directory.
-impl Emittable<Translator> for Session {
-    fn emit(&self, _translator: &Translator) -> RolloutFinding_Data {
+impl Emittable<CodexHarnessTranslator> for Session {
+    fn emit(&self, _translator: &CodexHarnessTranslator) -> RolloutFinding_Data {
         RolloutFinding_Data::Unfound
     }
 }
 
-impl Emittable<Translator> for ClaimIdentity_Data {
-    fn emit(&self, _translator: &Translator) -> IdentityClaim_Data {
+impl Emittable<CodexHarnessTranslator> for ClaimIdentity_Data {
+    fn emit(&self, _translator: &CodexHarnessTranslator) -> IdentityClaim_Data {
         let output = match Command::new(&self.identity_producer.0)
             .arg("codex")
             .arg("--flows-root")
@@ -47,9 +52,9 @@ impl Emittable<Translator> for ClaimIdentity_Data {
         {
             Ok(output) => output,
             Err(error) => {
-                return IdentityClaim_Data::Unclaimed(IdentityFailure::NotStarted(diagnostic(
-                    error,
-                )));
+                return IdentityClaim_Data::Unclaimed(IdentityFailure::NotStarted(
+                    error.diagnostic(),
+                ));
             }
         };
         if !output.status.success() {
@@ -64,7 +69,7 @@ impl Emittable<Translator> for ClaimIdentity_Data {
             Ok(text) => text,
             Err(error) => {
                 return IdentityClaim_Data::Unclaimed(IdentityFailure::UnreadableOutput(
-                    diagnostic(error),
+                    error.diagnostic(),
                 ));
             }
         };
@@ -119,9 +124,10 @@ impl ReadingRows for [u8] {
     }
 }
 
-impl Emittable<Translator> for Watch {
-    fn emit(&self, _translator: &Translator) -> RolloutReading_Data {
-        let unreadable = |error| RolloutReading_Data::Unreadable(diagnostic(error));
+impl Emittable<CodexHarnessTranslator> for Watch {
+    fn emit(&self, _translator: &CodexHarnessTranslator) -> RolloutReading_Data {
+        let unreadable =
+            |error: std::io::Error| RolloutReading_Data::Unreadable(error.diagnostic());
         let Ok(start) = u64::try_from(self.byte_offset.0) else {
             return RolloutReading_Data::Unreadable(Diagnostic(format!(
                 "negative offset {}",
@@ -154,8 +160,8 @@ impl Emittable<Translator> for Watch {
 }
 
 /// A rollout's first whole row names its session when it is session_meta.
-impl Emittable<Translator> for FilePath {
-    fn emit(&self, _translator: &Translator) -> RolloutIdentity_Data {
+impl Emittable<CodexHarnessTranslator> for FilePath {
+    fn emit(&self, _translator: &CodexHarnessTranslator) -> RolloutIdentity_Data {
         let Ok(file) = File::open(&self.0) else {
             return RolloutIdentity_Data::Unidentified;
         };
