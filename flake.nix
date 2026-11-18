@@ -58,6 +58,9 @@
         in
         {
           inherit daemon translator cli pair default;
+          # The member's own package is its binaries with text, never with
+          # default features alone.
+          codex-harness-translator = built;
         }
       );
       workspace = base.lib.workspaceOutputs {
