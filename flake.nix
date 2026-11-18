@@ -89,7 +89,7 @@
             generated = pkgs.runCommand "codex-harness-nexus-generated" {
               nativeBuildInputs = [ ethos.packages.${pkgs.stdenv.hostPlatform.system}.ethos-zero ];
             } ''
-              for file in emission folding memory operation runtime; do
+              for file in actor emission folding memory operation runtime; do
                 ethos-zero "Generate.{ ${./crates/codex-harness-nexus/ethos}/$file.ethos $PWD/generated }"
                 diff -u ${./crates/codex-harness-nexus/src/generated}/$file.rs generated/$file.rs
               done

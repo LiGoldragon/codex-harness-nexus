@@ -19,43 +19,20 @@ use notify::event::{CreateKind, EventKind, ModifyKind, RenameMode};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher as _};
 use signal_codex_harness_nexus::{Diagnostic, ReportFailure};
 
-use crate::diagnosing::Diagnosing as _;
+use crate::generated::actor::{
+    Placement, Reach, WatchChangeKind, WatchConsequence, WatchEvent, WatchFailure, WatchGeneration,
+    WatchResult, WatchWord,
+};
 use crate::generated::memory::Rollout;
 use crate::generated::operation::Operation;
 use crate::generated::runtime::{Remembering, Waking};
 use crate::nexus::{HarnessNexus, Locking as _};
 
-/// One word of the kernel, stamped with the generation of the watch that
-/// heard it, so a word from a watch since replaced is let go.
-pub struct WatchWord {
-    pub generation: u64,
-    pub event: notify::Result<notify::Event>,
-}
-
-/// One configured sessions directory, as it was configured, and the
-/// directory its watch rests on: itself once it exists, until then its
-/// nearest existing ancestor; none, once the directory it rested on was
-/// removed, until it is placed anew.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Placement {
-    pub directory: FilePath,
-    pub resting: Option<PathBuf>,
-}
-
-/// How far a watch reaches from the directory it rests on: its entries, to
-/// hear the next path component made; or its whole tree, once the
-/// configured directory itself is there.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Reach {
-    Entries,
-    Whole,
-}
-
 /// One watch of every configured sessions directory: the kernel's watcher,
 /// where each directory's watch rests, and each directory watched and how
 /// far.
 pub struct DirectoryWatch {
-    pub generation: u64,
+    pub generation: WatchGeneration,
     pub watcher: RecommendedWatcher,
     pub placements: Vec<Placement>,
     pub watched: BTreeMap<PathBuf, Reach>,
@@ -66,69 +43,50 @@ pub struct DirectoryWatch {
 /// sessions directories are known.
 pub struct SessionsWatch {
     pub sender: Sender<WatchWord>,
-    pub drawn: u64,
+    pub drawn: WatchGeneration,
     pub current: Option<DirectoryWatch>,
 }
 
-/// What one word of the kernel told: the files written inside a directory
-/// that is there, the directories that came to be there, and each failure
-/// met while the watch moved.
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct Followed {
-    pub written: Vec<FilePath>,
-    pub arrived: Vec<FilePath>,
-    pub failures: Vec<Diagnostic>,
+fn nearest(directory: &FilePath) -> PathBuf {
+    let path = Path::new(&directory.0);
+    path.ancestors()
+        .find(|ancestor| ancestor.is_dir())
+        .unwrap_or(path)
+        .to_path_buf()
 }
 
-pub trait Placing: Sized {
-    /// Where a directory's watch rests now: on the directory, if it is
-    /// there; else on its nearest existing ancestor.
-    fn placed(directory: FilePath) -> Self;
-
-    /// The directory a watch of this one rests on now: the directory, if
-    /// it is there; else its nearest existing ancestor.
-    fn nearest(directory: &FilePath) -> PathBuf;
-
-    /// Whether the watch rests on the configured directory itself.
-    fn arrived(&self) -> bool;
-
-    /// How far the watch reaches from where it rests.
-    fn reach(&self) -> Reach;
-}
-
-impl Placing for Placement {
-    fn placed(directory: FilePath) -> Self {
-        Self {
-            resting: Some(Self::nearest(&directory)),
-            directory,
-        }
-    }
-
-    fn nearest(directory: &FilePath) -> PathBuf {
-        // An absolute path's ancestors end at the root, which is always
-        // there.
-        let path = Path::new(&directory.0);
-        path.ancestors()
-            .find(|ancestor| ancestor.is_dir())
-            .unwrap_or(path)
-            .to_path_buf()
-    }
-
-    fn arrived(&self) -> bool {
-        self.resting.as_deref() == Some(Path::new(&self.directory.0))
-    }
-
-    fn reach(&self) -> Reach {
-        if self.arrived() {
-            Reach::Whole
-        } else {
-            Reach::Entries
-        }
+fn placed(directory: FilePath) -> Placement {
+    let resting = nearest(&directory);
+    Placement {
+        file_path: directory,
+        file_path_option: Some(FilePath(resting.to_string_lossy().into_owned())),
     }
 }
 
-impl From<Reach> for RecursiveMode {
-    fn from(reach: Reach) -> Self {
+fn arrived(placement: &Placement) -> bool {
+    placement
+        .file_path_option
+        .as_ref()
+        .is_some_and(|resting| Path::new(&resting.0) == Path::new(&placement.file_path.0))
+}
+
+fn reach(placement: &Placement) -> Reach {
+    if arrived(placement) {
+        Reach::Whole
+    } else {
+        Reach::Entries
+    }
+}
+
+fn reaches(watched: &Reach, needed: &Reach) -> bool {
+    matches!(
+        (watched, needed),
+        (Reach::Whole, _) | (Reach::Entries, Reach::Entries)
+    )
+}
+
+impl From<&Reach> for RecursiveMode {
+    fn from(reach: &Reach) -> Self {
         match reach {
             Reach::Entries => RecursiveMode::NonRecursive,
             Reach::Whole => RecursiveMode::Recursive,
@@ -136,19 +94,57 @@ impl From<Reach> for RecursiveMode {
     }
 }
 
-pub trait Channelled: Sized {
-    /// The Nexus's watch, watching nothing yet, and the receiving end of
-    /// the channel every watch it opens speaks into.
-    fn channelled() -> (Self, Receiver<WatchWord>);
+impl From<Reach> for RecursiveMode {
+    fn from(reach: Reach) -> Self {
+        Self::from(&reach)
+    }
 }
 
-impl Channelled for SessionsWatch {
-    fn channelled() -> (Self, Receiver<WatchWord>) {
+fn owned_event(event: notify::Event) -> WatchEvent {
+    let watch_change_kind = match event.kind {
+        EventKind::Create(CreateKind::Folder) => WatchChangeKind::CreatedFolder,
+        EventKind::Create(_) => WatchChangeKind::Created,
+        EventKind::Remove(_) => WatchChangeKind::Removed,
+        EventKind::Modify(ModifyKind::Name(RenameMode::From)) => WatchChangeKind::RenamedFrom,
+        EventKind::Modify(_) => WatchChangeKind::Modified,
+        _ => WatchChangeKind::Other,
+    };
+    WatchEvent {
+        watch_change_kind,
+        file_path_vector: event
+            .paths
+            .into_iter()
+            .map(|path| FilePath(path.to_string_lossy().into_owned()))
+            .collect(),
+    }
+}
+
+fn owned_word(generation: WatchGeneration, event: notify::Result<notify::Event>) -> WatchWord {
+    let watch_result = match event {
+        Ok(event) => WatchResult::WatchEvent(owned_event(event)),
+        Err(error) => WatchResult::WatchFailure(WatchFailure {
+            file_path_option: error
+                .paths
+                .first()
+                .map(|path| FilePath(path.to_string_lossy().into_owned())),
+            diagnostic: Diagnostic(error.to_string()),
+        }),
+    };
+    WatchWord {
+        watch_generation: generation,
+        watch_result,
+    }
+}
+
+impl SessionsWatch {
+    /// The Nexus's watch, watching nothing yet, and the receiving end of
+    /// the channel every watch it opens speaks into.
+    pub fn channelled() -> (Self, Receiver<WatchWord>) {
         let (sender, words) = channel();
         (
             Self {
                 sender,
-                drawn: 0,
+                drawn: WatchGeneration(0),
                 current: None,
             },
             words,
@@ -180,13 +176,21 @@ impl Replacing for SessionsWatch {
         let Some(first) = directories.0.first() else {
             return Ok(None);
         };
-        self.drawn += 1;
+        let Some(next_generation) = self.drawn.0.checked_add(1) else {
+            return Err(UnwatchableDirectory {
+                file_path: first.clone(),
+                diagnostic: meta_signal_codex_harness_nexus::Diagnostic(
+                    "watch generation exhausted".to_owned(),
+                ),
+            });
+        };
+        self.drawn = WatchGeneration(next_generation);
         let generation = self.drawn;
         let sender = self.sender.clone();
         // The kernel's watcher is refused only at its own limit, which the
         // first directory is told under.
         let watcher = notify::recommended_watcher(move |event| {
-            let _ = sender.send(WatchWord { generation, event });
+            let _ = sender.send(owned_word(generation, event));
         })
         .map_err(|error| UnwatchableDirectory {
             file_path: first.clone(),
@@ -195,12 +199,7 @@ impl Replacing for SessionsWatch {
         let mut watch = DirectoryWatch {
             generation,
             watcher,
-            placements: directories
-                .0
-                .iter()
-                .cloned()
-                .map(Placement::placed)
-                .collect(),
+            placements: directories.0.iter().cloned().map(placed).collect(),
             watched: BTreeMap::new(),
         };
         match watch.settle().into_iter().next() {
@@ -232,11 +231,11 @@ pub trait Settling {
     /// watch: it is let go, every directory resting on it rests nowhere,
     /// and settling places each anew, so one made again at once is still
     /// told as come to be there.
-    fn forget(&mut self, event: &notify::Event);
+    fn forget(&mut self, event: &WatchEvent);
 
     /// The files this word says were written inside a configured
     /// directory that is there.
-    fn written(&self, event: &notify::Event) -> Vec<FilePath>;
+    fn written(&self, event: &WatchEvent) -> Vec<FilePath>;
 
     /// The configured directories not yet there.
     fn awaited(&self) -> AwaitedDirectories;
@@ -248,22 +247,21 @@ impl Settling for DirectoryWatch {
         loop {
             let mut moved = false;
             for index in 0..self.placements.len() {
-                let directory = self.placements[index].directory.clone();
-                let resting = Placement::nearest(&directory);
-                let wanted = Placement {
-                    directory,
-                    resting: Some(resting.clone()),
+                let wanted = placed(self.placements[index].file_path.clone());
+                let Some(resting_path) = wanted.file_path_option.as_ref() else {
+                    continue;
                 };
-                let reach = wanted.reach();
+                let resting = PathBuf::from(&resting_path.0);
+                let reach = reach(&wanted);
                 let covered = self
                     .watched
                     .get(&resting)
-                    .is_some_and(|watched| *watched >= reach);
+                    .is_some_and(|watched| reaches(watched, &reach));
                 if wanted == self.placements[index] && covered {
                     continue;
                 }
                 if !covered {
-                    match self.watcher.watch(&resting, reach.into()) {
+                    match self.watcher.watch(&resting, (&reach).into()) {
                         Ok(()) => {
                             self.watched.insert(resting.clone(), reach);
                         }
@@ -293,7 +291,12 @@ impl Settling for DirectoryWatch {
             let resting: Vec<PathBuf> = self
                 .placements
                 .iter()
-                .filter_map(|placement| placement.resting.clone())
+                .filter_map(|placement| {
+                    placement
+                        .file_path_option
+                        .as_ref()
+                        .map(|resting| PathBuf::from(&resting.0))
+                })
                 .collect();
             let released: Vec<PathBuf> = self
                 .watched
@@ -311,39 +314,45 @@ impl Settling for DirectoryWatch {
         }
     }
 
-    fn forget(&mut self, event: &notify::Event) {
+    fn forget(&mut self, event: &WatchEvent) {
         let gone = matches!(
-            event.kind,
-            EventKind::Remove(_) | EventKind::Modify(ModifyKind::Name(RenameMode::From))
+            &event.watch_change_kind,
+            WatchChangeKind::Removed | WatchChangeKind::RenamedFrom
         );
         if !gone {
             return;
         }
-        for path in &event.paths {
-            if self.watched.remove(path).is_some() {
-                let _ = self.watcher.unwatch(path);
+        for file_path in &event.file_path_vector {
+            let path = PathBuf::from(&file_path.0);
+            if self.watched.remove(&path).is_some() {
+                let _ = self.watcher.unwatch(&path);
                 for placement in &mut self.placements {
-                    if placement.resting.as_ref() == Some(path) {
-                        placement.resting = None;
+                    if placement
+                        .file_path_option
+                        .as_ref()
+                        .is_some_and(|resting| Path::new(&resting.0) == path.as_path())
+                    {
+                        placement.file_path_option = None;
                     }
                 }
             }
         }
     }
 
-    fn written(&self, event: &notify::Event) -> Vec<FilePath> {
-        match event.kind {
-            EventKind::Create(CreateKind::Folder) => vec![],
-            EventKind::Create(_) | EventKind::Modify(_) => event
-                .paths
+    fn written(&self, event: &WatchEvent) -> Vec<FilePath> {
+        match &event.watch_change_kind {
+            WatchChangeKind::CreatedFolder => vec![],
+            WatchChangeKind::Created | WatchChangeKind::Modified => event
+                .file_path_vector
                 .iter()
-                .filter(|path| {
+                .filter(|file_path| {
+                    let path = Path::new(&file_path.0);
                     self.placements.iter().any(|placement| {
-                        let directory = Path::new(&placement.directory.0);
-                        placement.arrived() && path.starts_with(directory) && *path != directory
+                        let directory = Path::new(&placement.file_path.0);
+                        arrived(placement) && path.starts_with(directory) && path != directory
                     })
                 })
-                .map(|path| FilePath(path.to_string_lossy().into_owned()))
+                .cloned()
                 .collect(),
             _ => vec![],
         }
@@ -353,8 +362,8 @@ impl Settling for DirectoryWatch {
         AwaitedDirectories(
             self.placements
                 .iter()
-                .filter(|placement| !placement.arrived())
-                .map(|placement| placement.directory.clone())
+                .filter(|placement| !arrived(placement))
+                .map(|placement| placement.file_path.clone())
                 .collect(),
         )
     }
@@ -369,7 +378,7 @@ pub trait Watching {
     /// Follows one word of the kernel: lets go of a directory gone, moves
     /// each watch to where it rests now, and tells a change in what is
     /// awaited to the configuration's subscribers.
-    fn follow(&self, word: WatchWord) -> Followed;
+    fn follow(&self, word: WatchWord) -> Vec<WatchConsequence>;
 }
 
 impl<Translator> Watching for HarnessNexus<Translator> {
@@ -383,22 +392,19 @@ impl<Translator> Watching for HarnessNexus<Translator> {
         Ok(())
     }
 
-    fn follow(&self, word: WatchWord) -> Followed {
+    fn follow(&self, word: WatchWord) -> Vec<WatchConsequence> {
         let mut sessions = self.sessions_watch.locked();
         let Some(watch) = sessions
             .current
             .as_mut()
-            .filter(|watch| watch.generation == word.generation)
+            .filter(|watch| watch.generation == word.watch_generation)
         else {
-            return Followed::default();
+            return vec![];
         };
-        let event = match word.event {
-            Ok(event) => event,
-            Err(error) => {
-                return Followed {
-                    failures: vec![error.diagnostic()],
-                    ..Followed::default()
-                };
+        let event = match word.watch_result {
+            WatchResult::WatchEvent(event) => event,
+            WatchResult::WatchFailure(failure) => {
+                return vec![WatchConsequence::WatchFailure(failure)];
             }
         };
         let before = watch.awaited();
@@ -410,11 +416,9 @@ impl<Translator> Watching for HarnessNexus<Translator> {
         let failures = watch
             .settle()
             .into_iter()
-            .map(|unwatchable| {
-                Diagnostic(format!(
-                    "{}: {}",
-                    unwatchable.file_path.0, unwatchable.diagnostic.0
-                ))
+            .map(|unwatchable| WatchFailure {
+                file_path_option: Some(unwatchable.file_path),
+                diagnostic: Diagnostic(unwatchable.diagnostic.0),
             })
             .collect();
         let after = watch.awaited();
@@ -423,15 +427,22 @@ impl<Translator> Watching for HarnessNexus<Translator> {
         {
             publisher.publish(ConfigurationChange::AwaitedDirectories(after.clone()));
         }
-        Followed {
-            written,
-            arrived: unplaced
-                .0
-                .into_iter()
-                .filter(|directory| !after.0.contains(directory))
-                .collect(),
-            failures,
+        let arrived: Vec<FilePath> = unplaced
+            .0
+            .into_iter()
+            .filter(|directory| !after.0.contains(directory))
+            .collect();
+        let mut consequences: Vec<WatchConsequence> = failures
+            .into_iter()
+            .map(WatchConsequence::WatchFailure)
+            .collect();
+        if !arrived.is_empty() {
+            consequences.push(WatchConsequence::Arrived(arrived));
         }
+        if !written.is_empty() {
+            consequences.push(WatchConsequence::Written(written));
+        }
+        consequences
     }
 }
 

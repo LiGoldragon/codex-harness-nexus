@@ -9,6 +9,7 @@ extern crate self as memory;
 extern crate self as operation;
 
 mod generated {
+    pub mod actor;
     pub mod emission;
     pub mod folding;
     pub mod memory;
@@ -25,6 +26,7 @@ mod views;
 mod watching;
 
 pub use diagnosing::Diagnosing;
+pub use generated::actor::*;
 pub use generated::emission;
 pub use generated::folding::*;
 pub use generated::memory::*;
@@ -33,7 +35,4 @@ pub use generated::runtime::*;
 pub use naming::CodexHarness;
 pub use nexus::{ConfigurationReading, HarnessNexus, Locking};
 pub use store::{Familial, Opening, Store};
-pub use watching::{
-    Channelled, DirectoryWatch, Followed, Placement, Placing, Reach, Replacing, SessionsWatch,
-    Settling, WatchWord, Watching,
-};
+pub use watching::{DirectoryWatch, Replacing, SessionsWatch, Settling, Watching};

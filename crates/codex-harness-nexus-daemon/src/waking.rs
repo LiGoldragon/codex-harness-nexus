@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use codex_harness_nexus::{
     Locking as _, Operation, Performed, Performing as _, Readying as _, Remembering as _,
-    Waking as _, Watching as _,
+    Waking as _, WatchConsequence, Watching as _,
 };
 use meta_signal_codex_harness_nexus::Set;
 use nexus_serving::Listening as _;
@@ -130,17 +130,26 @@ impl WatchFollowing for Daemon {
         std::thread::spawn(move || {
             let words = serving.words.locked();
             while let Ok(word) = words.recv() {
-                let followed = serving.nexus.follow(word);
-                for failure in &followed.failures {
-                    eprintln!("Codex Harness Nexus watch: {}", failure.0);
+                for consequence in serving.nexus.follow(word) {
+                    match consequence {
+                        WatchConsequence::WatchFailure(failure) => {
+                            let path = failure
+                                .file_path_option
+                                .map_or_else(String::new, |path| format!("{}: ", path.0));
+                            eprintln!("Codex Harness Nexus watch: {path}{}", failure.diagnostic.0);
+                        }
+                        WatchConsequence::Arrived(_) => {
+                            if serving.opened.get().is_some() {
+                                serving.perform_all(serving.nexus.startup());
+                            }
+                        }
+                        WatchConsequence::Written(paths) => {
+                            if serving.opened.get().is_some() {
+                                serving.perform_all(serving.nexus.woken(paths));
+                            }
+                        }
+                    }
                 }
-                if serving.opened.get().is_none() {
-                    continue;
-                }
-                if !followed.arrived.is_empty() {
-                    serving.perform_all(serving.nexus.startup());
-                }
-                serving.perform_all(serving.nexus.woken(followed.written));
             }
         });
     }

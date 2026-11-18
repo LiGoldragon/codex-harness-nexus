@@ -1,0 +1,26 @@
+Library
+[ harness:[ FilePath ]
+  meta_signal_codex_harness_nexus:[ Configuration ConfigurationReadout
+                                    ConfigurationRefusal Set SessionsDirectories ]
+  signal_codex_harness_nexus:Diagnostic ]
+[ WatchGeneration.Integer
+  WatchChangeKind.[ CreatedFolder Created Removed RenamedFrom Modified Other ]
+  WatchEvent.{ WatchChangeKind Vector<FilePath> }
+  WatchFailure.{ Option<FilePath> Diagnostic }
+  WatchResult.[ WatchEvent WatchFailure ]
+  WatchWord.{ WatchGeneration WatchResult }
+  Reach.[ Entries Whole ]
+  Placement.{ FilePath Option<FilePath> }
+  WatchConsequence.[ Written.Vector<FilePath> Arrived.Vector<FilePath> WatchFailure ]
+  ListenerFailure.[ Meta.String Public.String ]
+  Opened.Boolean ]
+[ ConfigurationSetting.[ setting.[ Set ] ]
+  SessionsDirectoriesSetting.[ sessions_directories.[ SessionsDirectories ] ]
+  NexusRuntime.[ read_configuration.[ Result<ConfigurationReadout Diagnostic> ]
+                  configure!{ [ ConfigurationSetting ]
+                              [ Result<Configuration ConfigurationRefusal> ] }
+                  watch_sessions!{ [ SessionsDirectoriesSetting ]
+                                   [ Option<WatchFailure> ] }
+                  follow_watch!{ [ WatchWord ] [ Vector<WatchConsequence> ] }
+                  open_public!{ [] [ Result<Opened ListenerFailure> ] } ] ]
+[]

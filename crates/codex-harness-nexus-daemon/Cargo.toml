@@ -15,6 +15,7 @@ signal-codex-harness-nexus.workspace = true
 meta-signal-codex-harness-nexus.workspace = true
 nexus-exchange.workspace = true
 nexus-serving.workspace = true
+kameo.workspace = true
 shared-translator.workspace = true
 tokio.workspace = true
 nix.workspace = true

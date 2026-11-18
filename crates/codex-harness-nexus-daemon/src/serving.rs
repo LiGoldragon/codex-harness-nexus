@@ -7,8 +7,9 @@ use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
+pub use codex_harness_nexus::ListenerFailure;
 use codex_harness_nexus::{
-    Channelled as _, CodexHarness, HarnessNexus, Opening as _, SessionsWatch, Store, WatchWord,
+    CodexHarness, HarnessNexus, Opening as _, SessionsWatch, Store, WatchWord,
 };
 use meta_signal_codex_harness_nexus as meta;
 use nexus_exchange::{MemoryPlacing as _, Named as _, ValidAdmission};
@@ -78,21 +79,10 @@ pub trait DaemonStarting: Sized {
     fn serve(self, runtime: tokio::runtime::Handle) -> Result<(), Box<dyn std::error::Error>>;
 }
 
-/// The listener that could no longer accept, which ends the daemon.
-#[derive(Debug)]
-pub enum ListenerFailure {
-    /// The meta socket's listener.
-    Meta(std::io::Error),
-    /// The public socket's listener.
-    Public(std::io::Error),
-}
-
 impl std::fmt::Display for ListenerFailure {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let title = CodexHarness::title().0;
         match self {
-            Self::Meta(error) => write!(formatter, "{title} meta listener failed: {error}"),
-            Self::Public(error) => write!(formatter, "{title} public listener failed: {error}"),
+            Self::Meta(message) | Self::Public(message) => formatter.write_str(message),
         }
     }
 }
@@ -156,7 +146,8 @@ impl DaemonStarting for Daemon {
                     Err(error) => break error,
                 }
             };
-            let _ = meta_failed.send(ListenerFailure::Meta(error));
+            let message = format!("{} meta listener failed: {error}", CodexHarness::title().0);
+            let _ = meta_failed.send(ListenerFailure::Meta(message));
         });
         // The public socket admits the translator alone, whose authority is
         // the unit this Nexus's PeerAdmitting names.
@@ -175,7 +166,11 @@ impl DaemonStarting for Daemon {
                     Err(error) => break error,
                 }
             };
-            let _ = failed.send(ListenerFailure::Public(error));
+            let message = format!(
+                "{} public listener failed: {error}",
+                CodexHarness::title().0
+            );
+            let _ = failed.send(ListenerFailure::Public(message));
         });
         Err(Box::new(failure.recv()?))
     }

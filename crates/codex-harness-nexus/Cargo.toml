@@ -26,6 +26,7 @@ rkyv.workspace = true
 tokio.workspace = true
 futures-util.workspace = true
 futures-channel.workspace = true
+kameo.workspace = true
 mio.workspace = true
 datom-codec = { workspace = true, optional = true }
 protos = { workspace = true, optional = true }

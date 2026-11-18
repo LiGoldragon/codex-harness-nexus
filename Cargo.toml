@@ -27,6 +27,7 @@ tokio = { version = "1.53.1", default-features = false, features = ["io-util", "
 futures-channel = { version = "0.3.34", default-features = false, features = ["std", "sink"] }
 mio = { version = "1.2.3", features = ["log", "net", "os-ext", "os-poll"] }
 futures-util = { version = "0.3.34", default-features = false, features = ["std", "async-await-macro", "channel", "io", "sink"] }
+kameo = { version = "0.22.2", default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
