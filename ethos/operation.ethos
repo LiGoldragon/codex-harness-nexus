@@ -1,0 +1,10 @@
+Operation
+[ :signal_codex_harness_nexus:Hook
+  :memory:Watch
+  :harness:Event
+  :flow:FlowId ]
+[ Reporting.Hook
+  Reading.Watch ]
+[ Reported.EventBatch
+  Read.EventBatch ]
+[ EventBatch.{ FlowId Vector<Event> Option<Watch> } ]

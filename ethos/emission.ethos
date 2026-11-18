@@ -1,5 +1,13 @@
 Emission
-[ harness:[ Session FilePath ] ]
-[ FindRollout.Session ]
-[ RolloutFinding.[ Found.FilePath Unfound ] ]
-[]
+[ harness:[ Session FilePath ]
+  flow:[ FlowId ] ]
+[ FindRollout.Session
+  ClaimIdentity.{ Session FlowsRoot.String } ]
+[ RolloutFinding.[ Found.FilePath Unfound ]
+  IdentityClaim.[ Claimed.FlowId Unclaimed.Failure ] ]
+[ Failure.[ NotStarted.Diagnostic
+            Refused.{ ExitStatus.Integer Diagnostic }
+            UnreadableOutput.Diagnostic
+            MalformedIdentity.ProducerOutput ]
+  Diagnostic.String
+  ProducerOutput.String ]
