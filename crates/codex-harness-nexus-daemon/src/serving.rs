@@ -1,41 +1,28 @@
-//! This Nexus's bodies for the shared serving: its name, the bounds its
-//! public socket is served within, its meta answer and its public answer.
+//! This Nexus's bodies for the shared serving: the bounds its public socket
+//! is served within, its meta answer and its public answer. Its name is the
+//! core's, which its translator names it by too.
 
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
-use codex_harness_nexus::{HarnessNexus, Opening as _, Remembering as _, Store};
+use codex_harness_nexus::{CodexHarness, HarnessNexus, Opening as _, Remembering as _, Store};
 use codex_harness_translator::Translator;
 use meta_signal_codex_harness_nexus as meta;
-use nexus_exchange::{ComponentName, ComponentTitle, Named, ValidAdmission};
+use nexus_exchange::ValidAdmission;
 use nexus_serving::{
     ConnectionServing, Listeners, Listening, MetaAnswering, PeerAdmitting, PublicConnection,
     PublicServing, Reply, SubscriptionClosing, TransportBounded,
 };
 use shared_translator::placement::Place;
 use shared_translator::{Caller, PeerIdentity};
-use signal::{FrameCapacity, Frame};
+use signal::{Frame, FrameCapacity};
 use signal_codex_harness_nexus::{Answer, Answerable as _, Changed, Input, Observations, Output};
 
 use crate::waking::ReadyOpening as _;
 
 /// The file in the place's state directory that holds the Nexus's Memory.
 const MEMORY_FILE: &str = "codex-harness.memory";
-
-/// The Codex Harness Nexus, as the shared serving names its sockets:
-/// codex-harness.sock, codex-harness-meta.sock and its translator's two.
-pub struct CodexHarness;
-
-impl Named for CodexHarness {
-    fn name() -> ComponentName {
-        ComponentName("codex-harness".into())
-    }
-
-    fn title() -> ComponentTitle {
-        ComponentTitle("Codex Harness Nexus".into())
-    }
-}
 
 /// The bounds the public socket is served within: the admission the pair
 /// launcher handed the Nexus.
