@@ -3,11 +3,13 @@ Library
   folding:FoldPlan
   memory:SessionRecord
   harness:[ Session FilePath ]
+  nexus_exchange:LaneFailure
   signal_codex_harness_nexus:[ Hook ReportFailure Changed Diagnostic ]
   meta_signal_codex_harness_nexus:[ Set Configuration FlowsRoot IdentityProducer
                                     SessionsDirectories ThreadDatabases Capacity ] ]
 [ ReadyConfiguration.{ FlowsRoot IdentityProducer SessionsDirectories
-                       ThreadDatabases Capacity } ]
+                       ThreadDatabases Capacity }
+  Performed.{ Vector<Changed> Option<LaneFailure> } ]   ; committed; the lane failed only where the effect did not need it
 [ Sessional.[ session.[ Session ] ]
   Operable.[ operation.[ Operation ] ]
   Planned.[ plan.[ FoldPlan ] ]
@@ -17,7 +19,7 @@ Library
   Observing.[ publish.{ [ Vector<Changed> ] [] }
               prepare.[ Result<Capacity ReportFailure> ] ]
   Attempting.[ attempt.{ [ Operable ] [ Result<Outcome ReportFailure> ] } ]
-  Performing.[ perform.{ [ Operable ] [ Result<Vector<Changed> ReportFailure> ] } ]
+  Performing.[ perform.{ [ Operable ] [ Result<Performed ReportFailure> ] } ]
   Waking.[ startup.[ Result<Vector<Operation> ReportFailure> ]
            woken.{ [ Vector<FilePath> ] [ Result<Vector<Operation> ReportFailure> ] } ]
   Remembering.[ recall.{ [ Sessional ] [ Result<Option<SessionRecord> Diagnostic> ] }

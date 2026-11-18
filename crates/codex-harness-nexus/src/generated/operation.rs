@@ -24,8 +24,16 @@ pub enum Operation {
 #[rustfmt::skip]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct ReportedLaneFailed_Data {
+    pub event_batch: EventBatch,
+    pub lane_failure: nexus_exchange::LaneFailure,
+}
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub enum Outcome {
     Reported(EventBatch),
     Read(EventBatch),
     Discovered(std::option::Option<EventBatch>),
+    ReportedLaneFailed(ReportedLaneFailed_Data),
 }

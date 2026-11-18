@@ -17,9 +17,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .prepare_for_start()
         .map_err(|error| format!("place preparation failed: {error}"))?;
     let daemon = Daemon::bind(&bootstrap.place, admission, bootstrap.peer_identity)?;
-    // The public socket's connections run on this runtime; the meta socket,
-    // the accepting and each watch of the sessions directories stay on
-    // threads of their own.
+    // Both sockets' connections run on this runtime; the accepting and each
+    // watch of the sessions directories stay on threads of their own.
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;

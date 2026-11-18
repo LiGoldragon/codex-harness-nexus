@@ -9,8 +9,8 @@
 use std::sync::Arc;
 
 use codex_harness_nexus::{
-    Locking as _, Operation, Performing as _, Readying as _, Remembering as _, Waking as _,
-    Watching as _,
+    Locking as _, Operation, Performed, Performing as _, Readying as _, Remembering as _,
+    Waking as _, Watching as _,
 };
 use meta_signal_codex_harness_nexus::Set;
 use nexus_serving::Listening as _;
@@ -43,7 +43,8 @@ pub trait WatchFollowing {
 /// What the watch thread asks of the served Nexus.
 pub trait Supervising {
     /// Performs each operation in turn; a refusal is reported and the rest
-    /// go on.
+    /// go on, and so is a lane that failed where the effect did not need
+    /// it, which was committed.
     fn perform_all(&self, operations: Result<Vec<Operation>, ReportFailure>);
 }
 
@@ -52,8 +53,20 @@ impl Supervising for Serving {
         match operations {
             Ok(operations) => {
                 for operation in operations {
-                    if let Err(failure) = self.nexus.perform(operation) {
-                        eprintln!("Codex Harness Nexus operation refused: {failure:?}");
+                    match self.nexus.perform(operation) {
+                        Ok(Performed {
+                            lane_failure_option: Some(lane_failure),
+                            ..
+                        }) => eprintln!(
+                            "Codex Harness Nexus operation committed; its lane failed: {lane_failure:?}"
+                        ),
+                        Ok(Performed {
+                            lane_failure_option: None,
+                            ..
+                        }) => {}
+                        Err(failure) => {
+                            eprintln!("Codex Harness Nexus operation refused: {failure:?}")
+                        }
                     }
                 }
             }

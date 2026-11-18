@@ -15,6 +15,13 @@ pub struct ReadyConfiguration {
     pub capacity: meta_signal_codex_harness_nexus::Capacity,
 }
 #[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct Performed {
+    pub changed_vector: std::vec::Vec<signal_codex_harness_nexus::Changed>,
+    pub lane_failure_option: std::option::Option<nexus_exchange::LaneFailure>,
+}
+#[rustfmt::skip]
 pub trait Sessional {
     fn session(&self) -> harness::Session;
 }
@@ -63,10 +70,7 @@ pub trait Performing {
     fn perform<N: Operable>(
         &self,
         input: N,
-    ) -> std::result::Result<
-        std::vec::Vec<signal_codex_harness_nexus::Changed>,
-        signal_codex_harness_nexus::ReportFailure,
-    >;
+    ) -> std::result::Result<Performed, signal_codex_harness_nexus::ReportFailure>;
 }
 #[rustfmt::skip]
 pub trait Waking {

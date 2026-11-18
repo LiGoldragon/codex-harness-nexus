@@ -19,6 +19,9 @@ shared-translator.workspace = true
 tokio.workspace = true
 nix.workspace = true
 
+[dev-dependencies]
+flow.workspace = true
+
 # The daemon: it reads its bootstrap from the pair launcher and serves the
 # Nexus.
 [[bin]]

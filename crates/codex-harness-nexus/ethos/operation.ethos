@@ -2,11 +2,13 @@ Operation
 [ :signal_codex_harness_nexus:[ Hook Observation ]
   :harness:[ Session FilePath ]
   :memory:[ Watch Rollout ]
-  :flow:FlowId ]
+  :flow:FlowId
+  :nexus_exchange:LaneFailure ]
 [ Reporting.Hook
   Reading.Watch
   Discovering.FilePath ]
 [ Reported.EventBatch
   Read.EventBatch
-  Discovered.Option<EventBatch> ]
+  Discovered.Option<EventBatch>
+  ReportedLaneFailed.{ EventBatch LaneFailure } ]   ; reported; its rollout's lookup failed on the lane
 [ EventBatch.{ Session FlowId Vector<Observation> Option<Rollout> } ]

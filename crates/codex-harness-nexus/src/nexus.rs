@@ -14,17 +14,16 @@ use signal_codex_harness_nexus::{
     Changed, Diagnostic, Hook, Observation, Observations, Output, ReportFailure,
 };
 
-use crate::failing::LaneReporting as _;
 use crate::generated::emission::{
     ClaimIdentity_Data, Emittable, FlowsRoot, IdentityClaim_Data, IdentityProducer,
     RolloutFinding_Data, RolloutIdentity_Data, RolloutReading_Data,
 };
 use crate::generated::folding::{FoldRefusal, Folding};
 use crate::generated::memory::{Rollout, SessionRecord, Watch};
-use crate::generated::operation::{EventBatch, Operation, Outcome};
+use crate::generated::operation::{EventBatch, Operation, Outcome, ReportedLaneFailed_Data};
 use crate::generated::runtime::{
-    Attempting, NamingPaths, Observing, Operable, Performing, ReadyConfiguration, Readying,
-    Remembering, Sessional,
+    Attempting, NamingPaths, Observing, Operable, Performed, Performing, ReadyConfiguration,
+    Readying, Remembering, Sessional,
 };
 use crate::store::Store;
 use crate::watching::{Replacing as _, SessionsWatch};
@@ -118,13 +117,15 @@ where
                         IdentityClaim_Data::Unclaimed(failure) => {
                             return Err(ReportFailure::Unidentified(failure));
                         }
+                        // A new session's record needs its identity, so a
+                        // lane that fails here records nothing.
                         IdentityClaim_Data::LaneFailed(lane_failure) => {
-                            return Err(lane_failure.report_failure());
+                            return Err(ReportFailure::LaneFailed(lane_failure));
                         }
                     },
                     (None, _) => return Err(ReportFailure::Unregistered(session)),
                 };
-                let rollout_option = match (&hook, &record) {
+                let (rollout_option, lane_failure_option) = match (&hook, &record) {
                     // A rollout already watched stays as it is watched.
                     (
                         _,
@@ -132,25 +133,38 @@ where
                             rollout: Rollout::Watched(_),
                             ..
                         }),
-                    ) => None,
-                    (Hook::SessionStart(start), _) => Some(match &start.file_path_option {
-                        Some(path) => Rollout::Pending(path.clone()),
+                    ) => (None, None),
+                    (Hook::SessionStart(start), _) => match &start.file_path_option {
+                        Some(path) => (Some(Rollout::Pending(path.clone())), None),
                         None => match session.emit(&self.translator) {
-                            RolloutFinding_Data::Found(path) => Rollout::Pending(path),
-                            RolloutFinding_Data::Unfound => Rollout::Unlocated,
+                            RolloutFinding_Data::Found(path) => {
+                                (Some(Rollout::Pending(path)), None)
+                            }
+                            RolloutFinding_Data::Unfound => (Some(Rollout::Unlocated), None),
+                            // The session is recorded whatever the lane does:
+                            // its rollout stays as the Memory holds it,
+                            // unlocated for a new session, and the watch
+                            // finds it by its first row at its next write.
                             RolloutFinding_Data::LaneFailed(lane_failure) => {
-                                return Err(lane_failure.report_failure());
+                                (None, Some(lane_failure))
                             }
                         },
-                    }),
-                    _ => None,
+                    },
+                    _ => (None, None),
                 };
-                Ok(Outcome::Reported(EventBatch {
+                let event_batch = EventBatch {
                     session,
                     flow_id,
                     observation_vector: hook.events().into_iter().map(Observation::Event).collect(),
                     rollout_option,
-                }))
+                };
+                Ok(match lane_failure_option {
+                    None => Outcome::Reported(event_batch),
+                    Some(lane_failure) => Outcome::ReportedLaneFailed(ReportedLaneFailed_Data {
+                        event_batch,
+                        lane_failure,
+                    }),
+                })
             }
             Operation::Reading(watch) => {
                 let record = self
@@ -180,7 +194,7 @@ where
                         Err(ReportFailure::Unrecorded(diagnostic))
                     }
                     RolloutReading_Data::LaneFailed(lane_failure) => {
-                        Err(lane_failure.report_failure())
+                        Err(ReportFailure::LaneFailed(lane_failure))
                     }
                 }
             }
@@ -216,7 +230,7 @@ where
                         .map_or(Outcome::Discovered(None), attached)),
                     RolloutIdentity_Data::Unidentified => Ok(Outcome::Discovered(None)),
                     RolloutIdentity_Data::LaneFailed(lane_failure) => {
-                        Err(lane_failure.report_failure())
+                        Err(ReportFailure::LaneFailed(lane_failure))
                     }
                 }
             }
@@ -242,20 +256,28 @@ where
     Watch: Emittable<Translator, Outcome = RolloutReading_Data>,
     FilePath: Emittable<Translator, Outcome = RolloutIdentity_Data>,
 {
-    fn perform<N: Operable>(&self, input: N) -> Result<Vec<Changed>, ReportFailure> {
-        let changes = {
+    fn perform<N: Operable>(&self, input: N) -> Result<Performed, ReportFailure> {
+        let (performed, attached) = {
             let _serial = self.serial.locked();
             // A discovery attaches a rollout; only that is read again at once.
-            let (batch, attached) = match self.attempt(input)? {
-                Outcome::Reported(batch) | Outcome::Read(batch) => (batch, None),
+            let (batch, attached, lane_failure_option) = match self.attempt(input)? {
+                Outcome::Reported(batch) | Outcome::Read(batch) => (batch, None, None),
+                Outcome::ReportedLaneFailed(reported) => {
+                    (reported.event_batch, None, Some(reported.lane_failure))
+                }
                 Outcome::Discovered(Some(batch)) => {
                     let attached = match &batch.rollout_option {
                         Some(Rollout::Watched(watch)) => Some(watch.clone()),
                         _ => None,
                     };
-                    (batch, attached)
+                    (batch, attached, None)
                 }
-                Outcome::Discovered(None) => return Ok(vec![]),
+                Outcome::Discovered(None) => {
+                    return Ok(Performed {
+                        changed_vector: vec![],
+                        lane_failure_option: None,
+                    });
+                }
             };
             let record = self
                 .store
@@ -264,15 +286,30 @@ where
             let plan = batch.fold(record)?;
             let changes = self.store.commit(plan).map_err(ReportFailure::Unrecorded)?;
             self.publish(changes.clone());
-            (changes, attached)
+            (
+                Performed {
+                    changed_vector: changes,
+                    lane_failure_option,
+                },
+                attached,
+            )
         };
-        // A rollout just attached is read at once, from its start.
-        match changes {
-            (mut changes, Some(watch)) => {
-                changes.extend(self.perform(Operation::Reading(watch))?);
-                Ok(changes)
-            }
-            (changes, None) => Ok(changes),
+        // A rollout just attached is read at once, from its start. The
+        // attachment needs no lane, so it stays committed when the lane
+        // fails the read, which the rollout's next write tries again.
+        match attached {
+            Some(watch) => match self.perform(Operation::Reading(watch)) {
+                Ok(read) => Ok(Performed {
+                    changed_vector: [performed.changed_vector, read.changed_vector].concat(),
+                    lane_failure_option: performed.lane_failure_option.or(read.lane_failure_option),
+                }),
+                Err(ReportFailure::LaneFailed(lane_failure)) => Ok(Performed {
+                    lane_failure_option: Some(lane_failure),
+                    ..performed
+                }),
+                Err(failure) => Err(failure),
+            },
+            None => Ok(performed),
         }
     }
 }
@@ -323,10 +360,21 @@ where
     Watch: Emittable<Translator, Outcome = RolloutReading_Data>,
     FilePath: Emittable<Translator, Outcome = RolloutIdentity_Data>,
 {
+    /// The contract answers Reported for `Ok`; every other answer is the
+    /// `Err` side, a report recorded though the lane failed where it was
+    /// not needed among them.
     fn report(&self, hook: &Hook) -> Result<(), Output> {
-        self.perform(hook.clone())
-            .map(|_| ())
-            .map_err(Output::ReportRefused)
+        match self.perform(hook.clone()) {
+            Ok(Performed {
+                lane_failure_option: None,
+                ..
+            }) => Ok(()),
+            Ok(Performed {
+                lane_failure_option: Some(lane_failure),
+                ..
+            }) => Err(Output::ReportedLaneFailed(lane_failure)),
+            Err(failure) => Err(Output::ReportRefused(failure)),
+        }
     }
 
     fn subscribe(&self) -> Result<signal::Stream<Observations, Changed>, Output> {

@@ -1,20 +1,21 @@
 //! This Nexus's bodies for the shared serving: the bounds its public socket
 //! is served within, its meta answer and its public answer. Its name is the
-//! core's, which its translator names it by too.
+//! core's, which its translator names it by too, and its Memory's path is
+//! the shared one that name gives.
 
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use codex_harness_nexus::{
-    Channelled as _, CodexHarness, ConfigurationReading as _, HarnessNexus, MemoryPlacing as _,
-    Opening as _, SessionsWatch, Store, WatchWord,
+    Channelled as _, CodexHarness, HarnessNexus, Opening as _, SessionsWatch, Store, WatchWord,
 };
 use meta_signal_codex_harness_nexus as meta;
-use nexus_exchange::{Named as _, ValidAdmission};
+use nexus_exchange::{MemoryPlacing as _, Named as _, ValidAdmission};
 use nexus_serving::{
-    ConnectionServing, EmissionLane, Listeners, Listening, MetaAnswering, PeerAdmitting,
-    PublicConnection, PublicServing, Reply, SubscriptionClosing, TransportBounded,
+    ConnectionServing, EmissionLane, Listeners, Listening, MetaAnswering, MetaConnection,
+    MetaServing, PeerAdmitting, PublicConnection, PublicServing, Reply, SubscriptionClosing,
+    TransportBounded,
 };
 use shared_translator::placement::Place;
 use shared_translator::{Caller, PeerIdentity};
@@ -51,8 +52,8 @@ pub struct Serving {
     pub words: Mutex<Receiver<WatchWord>>,
 }
 
-/// The served Nexus, shared by the meta thread, the public accepting and
-/// every connection's task.
+/// The served Nexus, shared by the accepting threads and every connection's
+/// task.
 #[derive(Clone)]
 pub struct Daemon {
     pub serving: Arc<Serving>,
@@ -70,8 +71,8 @@ pub trait DaemonStarting: Sized {
     ) -> Result<Self, Box<dyn std::error::Error>>;
 
     /// Serves until a listener fails, and answers with that failure: the
-    /// meta socket, the public accepting and the watch each on a thread of
-    /// its own, the public socket's connections on `runtime`. The sessions
+    /// meta accepting, the public accepting and the watch each on a thread
+    /// of its own, both sockets' connections on `runtime`. The sessions
     /// directories already recorded are watched, and a configuration
     /// already ready opens the public socket at once.
     fn serve(self, runtime: tokio::runtime::Handle) -> Result<(), Box<dyn std::error::Error>>;
@@ -80,8 +81,8 @@ pub trait DaemonStarting: Sized {
 /// The listener that could no longer accept, which ends the daemon.
 #[derive(Debug)]
 pub enum ListenerFailure {
-    /// The meta socket's listener, its error as it was told.
-    Meta(signal_codex_harness_nexus::Diagnostic),
+    /// The meta socket's listener.
+    Meta(std::io::Error),
     /// The public socket's listener.
     Public(std::io::Error),
 }
@@ -90,9 +91,7 @@ impl std::fmt::Display for ListenerFailure {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let title = CodexHarness::title().0;
         match self {
-            Self::Meta(diagnostic) => {
-                write!(formatter, "{title} meta listener failed: {}", diagnostic.0)
-            }
+            Self::Meta(error) => write!(formatter, "{title} meta listener failed: {error}"),
             Self::Public(error) => write!(formatter, "{title} public listener failed: {error}"),
         }
     }
@@ -138,16 +137,26 @@ impl DaemonStarting for Daemon {
         self.follow_watch();
         self.open()?;
         let (failed, failure) = mpsc::channel();
-        let meta = self.clone();
+        // The meta socket admits the paired translator alone; each of its
+        // connections is served on the runtime, side by side, so a
+        // Configure is answered while a Subscribe stays open.
+        let meta = Arc::new(self.clone());
+        let meta_runtime = runtime.clone();
         let meta_failed = failed.clone();
         std::thread::spawn(move || {
             let error = loop {
-                if let Err(error) = meta.serving.listeners.serve_next_meta(&meta) {
-                    break error;
+                match meta.serving.listeners.accept_meta() {
+                    Ok(stream) => {
+                        meta_runtime.spawn(MetaConnection::<Daemon>::serve(
+                            stream,
+                            Arc::clone(&meta),
+                            meta.serving.bounds.admission,
+                        ));
+                    }
+                    Err(error) => break error,
                 }
             };
-            let diagnostic = signal_codex_harness_nexus::Diagnostic(error.to_string());
-            let _ = meta_failed.send(ListenerFailure::Meta(diagnostic));
+            let _ = meta_failed.send(ListenerFailure::Meta(error));
         });
         // The public socket admits the translator alone, whose authority is
         // the unit this Nexus's PeerAdmitting names.
@@ -175,36 +184,40 @@ impl DaemonStarting for Daemon {
 /// The meta socket: Configure sets one value, and a value that makes the
 /// configuration ready, or moves the sessions directories, opens what
 /// follows from it; the text budget is the translator's, which answers it
-/// itself, so one sent here is refused. Subscribe answers the readout, the
+/// itself, so one sent here is refused. Subscribe opens on the readout, the
 /// configuration as the Nexus holds it and the sessions directories it
-/// awaits, one Opened frame, since the meta exchange answers once; its text
-/// budget is the translator's and stays unset here.
+/// awaits, and stays open, carrying each value set and each change in what
+/// is awaited; it needs the subscriber capacity, and before it is set is
+/// refused CapacityUnset. The text budget is the translator's, which writes
+/// it into the readout and carries its own changes into the subscription.
 impl MetaAnswering for Daemon {
+    type Component = CodexHarness;
     type Query = meta::Input;
     type Response = meta::Output;
+    type State = meta::ConfigurationReadout;
+    type Change = meta::ConfigurationChange;
 
-    fn answer(&self, input: meta::Input) -> meta::Output {
-        let nexus = &self.serving.nexus;
-        match input {
-            meta::Input::Configure(set) => {
-                let output = match meta::Answerable::answer(&meta::Input::Configure(set), nexus) {
-                    meta::Answer::Once(output) => output,
-                    meta::Answer::Subscribed(_) => unreachable!("Configure answers once"),
-                };
+    fn answer(
+        &self,
+        input: meta::Input,
+    ) -> Reply<meta::Output, meta::ConfigurationReadout, meta::ConfigurationChange> {
+        match meta::Answerable::answer(&input, &self.serving.nexus) {
+            meta::Answer::Once(output) => {
                 if let meta::Output::Configured(set) = &output
                     && let Err(error) = self.configured(set)
                 {
                     eprintln!("Codex Harness Nexus could not open after {set:?}: {error}");
                 }
-                output
+                Reply::Once(output)
             }
-            meta::Input::Subscribe => match nexus.readout() {
-                Ok(readout) => meta::Output::Subscribed(Frame::Opened(readout)),
-                Err(diagnostic) => meta::Output::ConfigureRefused(
-                    meta::ConfigurationRefusal::Unrecorded(meta::Diagnostic(diagnostic.0)),
-                ),
-            },
+            meta::Answer::Subscribed(stream) => Reply::Subscribed(stream),
         }
+    }
+
+    fn subscribed(
+        frame: Frame<meta::ConfigurationReadout, meta::ConfigurationChange>,
+    ) -> meta::Output {
+        meta::Output::Subscribed(frame)
     }
 }
 

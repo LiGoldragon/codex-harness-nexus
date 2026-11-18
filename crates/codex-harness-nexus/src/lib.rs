@@ -25,13 +25,12 @@ mod views;
 mod watching;
 
 pub use diagnosing::Diagnosing;
-pub use failing::LaneReporting;
 pub use generated::emission;
 pub use generated::folding::*;
 pub use generated::memory::*;
 pub use generated::operation::*;
 pub use generated::runtime::*;
-pub use naming::{CodexHarness, MemoryPlacing};
+pub use naming::CodexHarness;
 pub use nexus::{ConfigurationReading, HarnessNexus, Locking};
 pub use store::{Familial, Opening, Store};
 pub use watching::{
