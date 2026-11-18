@@ -1,4 +1,7 @@
 Memory
-[ harness:[ FilePath ]
-  flow:[ FlowId ] ]
-[ Watch.{ FlowId FilePath Offset.Integer } ]
+[ harness:[ FilePath Session Observed ]
+  flow:[ FlowId ]
+  signal_codex_harness_nexus:[ ByteOffset ParseFailure ] ]
+[ Watch.{ FlowId FilePath ByteOffset }
+  SessionRecord.{ Session Observed Option<Watch> }
+  MalformedRecord.{ FlowId ByteOffset ParseFailure } ]

@@ -1,9 +1,10 @@
 Operation
 [ :signal_codex_harness_nexus:[ Hook Observation ]
+  :harness:Session
   :memory:Watch
   :flow:FlowId ]
 [ Reporting.Hook
   Reading.Watch ]
 [ Reported.EventBatch
   Read.EventBatch ]
-[ EventBatch.{ FlowId Vector<Observation> Option<Watch> } ]
+[ EventBatch.{ Session FlowId Vector<Observation> Option<Watch> } ]

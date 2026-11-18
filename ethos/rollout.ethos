@@ -1,9 +1,12 @@
 Library
-[ harness:[ Tokens Response ] ]
-[ Row.[ TaskStarted
+[ harness:[ Tokens Response Observable ]
+  signal_codex_harness_nexus:ParseFailure ]
+[ RowText.String
+  Row.[ TaskStarted
         TokenCount.Option<Tokens>
         TaskComplete.Option<Response>
         TurnAborted
         Other ] ]
-[]
-[]
+[ Interpretable.[ row.[ Result<Row ParseFailure> ] ] ]
+[ Row.[ Observable ]
+  RowText.[ Interpretable ] ]
