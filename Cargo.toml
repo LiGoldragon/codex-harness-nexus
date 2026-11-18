@@ -1,14 +1,17 @@
 [workspace]
-members = ["crates/codex-harness-nexus", "crates/codex-harness-translator"]
+members = ["crates/codex-harness-nexus", "crates/codex-harness-translator", "crates/codex-harness-nexus-daemon"]
 resolver = "2"
 
 [workspace.dependencies]
 harness = { package = "harness-nexus-library", git = "https://github.com/LiGoldragon/harness-nexus-library", rev = "3613d63d0994de7841bcf6f070c83bebb0ddfa5a", default-features = false }
 flow = { package = "flow-ethos", git = "https://github.com/LiGoldragon/flow", rev = "062ef9e1", default-features = false }
 signal = { git = "https://github.com/LiGoldragon/signal", rev = "4f5cbb9", default-features = false }
-signal-codex-harness-nexus = { git = "https://github.com/LiGoldragon/signal-codex-harness-nexus", rev = "8bd9dc670b8103adcabf447b70d3a4fc195df7a5", default-features = false }
-meta-signal-codex-harness-nexus = { git = "https://github.com/LiGoldragon/meta-signal-codex-harness-nexus", rev = "8a504bc80b12d7f75860c276f64e06f387df3ba0", default-features = false }
+signal-codex-harness-nexus = { git = "https://github.com/LiGoldragon/signal-codex-harness-nexus", rev = "6a6fd1c53a2186689ee31e849203e7dd67f76c99", default-features = false }
+meta-signal-codex-harness-nexus = { git = "https://github.com/LiGoldragon/meta-signal-codex-harness-nexus", rev = "84e596322c49483af7f181b18a8221fce84a2778", default-features = false }
 nexus = { git = "https://github.com/LiGoldragon/nexus", rev = "d020a62", default-features = false }
+nexus-exchange = { git = "https://github.com/LiGoldragon/nexus", rev = "8976179c940b4a822990f519515084cb62d3f908", default-features = false }
+nexus-serving = { git = "https://github.com/LiGoldragon/nexus", rev = "8976179c940b4a822990f519515084cb62d3f908", default-features = false }
+shared-translator = { package = "translator", git = "https://github.com/LiGoldragon/translator", rev = "29601a3", default-features = false, features = ["unix"] }
 memory-engine = { git = "https://github.com/LiGoldragon/memory-engine", rev = "3261088" }
 rkyv = { version = "0.8", default-features = false, features = ["std", "bytecheck", "little_endian", "pointer_width_32", "unaligned"] }
 datom-codec = { git = "https://github.com/LiGoldragon/datom-codec", rev = "09a0526" }
