@@ -21,6 +21,13 @@ pub struct Performed {
     pub report_fault_vector: std::vec::Vec<signal_codex_harness_nexus::ReportFault>,
 }
 #[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct PerformanceFailure {
+    pub report_failure: signal_codex_harness_nexus::ReportFailure,
+    pub report_fault_vector: std::vec::Vec<signal_codex_harness_nexus::ReportFault>,
+}
+#[rustfmt::skip]
 pub trait Diagnosing {
     fn diagnostic(&self) -> signal_codex_harness_nexus::Diagnostic;
 }
@@ -73,7 +80,7 @@ pub trait Performing {
     fn perform<N: Operable>(
         &mut self,
         input: N,
-    ) -> std::result::Result<Performed, signal_codex_harness_nexus::ReportFailure>;
+    ) -> std::result::Result<Performed, PerformanceFailure>;
 }
 #[rustfmt::skip]
 pub trait Waking {

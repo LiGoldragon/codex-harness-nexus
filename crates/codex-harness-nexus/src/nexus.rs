@@ -25,7 +25,8 @@ use crate::generated::actor::{
     OpenPublicRequest, Opened, PerformRequest, PublicOpening, ReadConfigurationRequest,
     ReportRequest, Reportable, SessionsDirectoriesSetting, SessionsWatching, Settling,
     SubscribeConfigurationRequest, SubscribeObservationsRequest, WatchConsequence, WatchFailure,
-    WatchPlanBuilding, WatchSessionsRequest, WatchTarget, WatchWord, WatchWordInput,
+    WatchLifecycle, WatchPlanBuilding, WatchSessionsRequest, WatchTarget, WatchWord,
+    WatchWordInput,
 };
 use crate::generated::emission::{
     ClaimIdentity_Data, Emittable, FlowsRoot, IdentityClaim_Data, IdentityProducer,
@@ -35,8 +36,8 @@ use crate::generated::folding::Folding;
 use crate::generated::memory::{Rollout, SessionRecord, Watch};
 use crate::generated::operation::{EventBatch, Operation, Outcome, ReportedLaneFailed_Data};
 use crate::generated::runtime::{
-    Attempting, NamingPaths, Observing, Operable, Performed, Performing, ReadyConfiguration,
-    Readying, Remembering, Sessional, Settable, Waking,
+    Attempting, NamingPaths, Observing, Operable, PerformanceFailure, Performed, Performing,
+    ReadyConfiguration, Readying, Remembering, Sessional, Settable, Waking,
 };
 use crate::store::Store;
 use crate::watching::SessionsWatch;
@@ -73,6 +74,15 @@ where
     fn from(failure: kameo::error::SendError<M, Infallible>) -> Self {
         Self {
             diagnostic: Diagnostic(format!("core actor request failed: {failure:?}")),
+        }
+    }
+}
+
+impl From<ReportFailure> for PerformanceFailure {
+    fn from(report_failure: ReportFailure) -> Self {
+        Self {
+            report_failure,
+            report_fault_vector: vec![],
         }
     }
 }
@@ -265,128 +275,158 @@ where
     Watch: Emittable<Translator, Outcome = RolloutReading_Data>,
     FilePath: Emittable<Translator, Outcome = RolloutIdentity_Data>,
 {
-    fn perform<N: Operable>(&mut self, input: N) -> Result<Performed, ReportFailure> {
+    fn perform<N: Operable>(&mut self, input: N) -> Result<Performed, PerformanceFailure> {
         let explicit_path = match input.operation() {
             Operation::Reporting(Hook::SessionStart(start)) => start.file_path_option.clone(),
             _ => None,
         };
-        let (performed, attached) = {
-            let (mut batch, mut attached, lane_failure_option) = match self.attempt(input)? {
-                Outcome::Reported(batch) | Outcome::Read(batch) => (batch, None, None),
-                Outcome::ReportedLaneFailed(reported) => {
-                    (reported.event_batch, None, Some(reported.lane_failure))
-                }
-                Outcome::Discovered(Some(batch)) => {
-                    let attached = match &batch.rollout_option {
-                        Some(Rollout::Watched(watch)) => Some(watch.clone()),
-                        _ => None,
-                    };
-                    (batch, attached, None)
-                }
-                Outcome::Discovered(None) => {
-                    return Ok(Performed {
-                        changed_vector: vec![],
-                        report_fault_vector: vec![],
-                    });
-                }
-            };
-            let mut report_fault_vector = lane_failure_option
-                .into_iter()
-                .map(ReportFault::LaneFailed)
-                .collect::<Vec<_>>();
-            let mut rollout_watch_preplaced = false;
-            if let Some(watch) = attached.as_ref() {
-                rollout_watch_preplaced = true;
-                let configuration = self
-                    .store
-                    .configuration()
-                    .map_err(ReportFailure::Unrecorded)?;
-                let mut records = self.store.recall_all().map_err(ReportFailure::Unrecorded)?;
-                for record in &mut records {
-                    if record.observed.flow_id == watch.flow_id {
-                        record.rollout = Rollout::Pending(watch.file_path.clone());
-                    }
-                }
-                let watch_plan = self
-                    .sessions_watch
-                    .planned(configuration.sessions_directories_option, records);
-                let failures = self.sessions_watch.retarget(watch_plan);
-                let mut attached_path_failed = false;
-                for failure in failures {
-                    if failure.watch_target_option == Some(WatchTarget::RolloutFile) {
-                        let file_path = failure
-                            .file_path_option
-                            .expect("rollout placement failures carry their target path");
-                        if file_path == watch.file_path {
-                            attached_path_failed = true;
-                        }
-                        report_fault_vector.push(ReportFault::Unwatched(RolloutWatchFailure {
-                            file_path,
-                            diagnostic: failure.diagnostic,
-                        }));
-                    } else {
-                        eprintln!(
-                            "Codex Harness Nexus watch {:?} at {:?}: {}",
-                            failure.watch_target_option,
-                            failure.file_path_option,
-                            failure.diagnostic.0
-                        );
-                    }
-                }
-                if attached_path_failed {
-                    batch.rollout_option = Some(Rollout::Pending(watch.file_path.clone()));
-                    attached = None;
-                }
+        let (mut batch, mut attached, lane_failure_option) = match self.attempt(input) {
+            Ok(Outcome::Reported(batch) | Outcome::Read(batch)) => (batch, None, None),
+            Ok(Outcome::ReportedLaneFailed(reported)) => {
+                (reported.event_batch, None, Some(reported.lane_failure))
             }
-            let record = self
-                .store
-                .recall(batch.session_id())
-                .map_err(ReportFailure::Unrecorded)?;
-            let plan = batch.fold(record)?;
-            let changes = self.store.commit(plan).map_err(ReportFailure::Unrecorded)?;
-            self.publish(changes.clone());
-            if !rollout_watch_preplaced {
-                match self.store.configuration() {
-                    Ok(configuration) => match self.store.recall_all() {
-                        Ok(records) => {
-                            let watch_plan = self
-                                .sessions_watch
-                                .planned(configuration.sessions_directories_option, records);
-                            for failure in self.sessions_watch.retarget(watch_plan) {
-                                if failure.watch_target_option == Some(WatchTarget::RolloutFile) {
-                                    let file_path = failure.file_path_option.expect(
-                                        "rollout placement failures carry their target path",
-                                    );
-                                    report_fault_vector.push(ReportFault::Unwatched(
-                                        RolloutWatchFailure {
-                                            file_path,
-                                            diagnostic: failure.diagnostic,
-                                        },
-                                    ));
-                                } else {
-                                    eprintln!(
-                                        "Codex Harness Nexus watch {:?} at {:?}: {}",
-                                        failure.watch_target_option,
-                                        failure.file_path_option,
-                                        failure.diagnostic.0
-                                    );
-                                }
-                            }
-                        }
-                        Err(failure) => report_fault_vector.push(ReportFault::MemoryFault(failure)),
-                    },
-                    Err(failure) => report_fault_vector.push(ReportFault::MemoryFault(failure)),
-                }
+            Ok(Outcome::Discovered(Some(batch))) => {
+                let attached = match &batch.rollout_option {
+                    Some(Rollout::Watched(watch)) => Some(watch.clone()),
+                    _ => None,
+                };
+                (batch, attached, None)
             }
-            (
-                Performed {
-                    changed_vector: changes,
-                    report_fault_vector,
-                },
-                attached,
-            )
+            Ok(Outcome::Discovered(None)) => {
+                return Ok(Performed {
+                    changed_vector: vec![],
+                    report_fault_vector: vec![],
+                });
+            }
+            Err(report_failure) => return Err(report_failure.into()),
         };
-        let mut performed = performed;
+        let mut report_fault_vector = lane_failure_option
+            .into_iter()
+            .map(ReportFault::LaneFailed)
+            .collect::<Vec<_>>();
+        let previous_record = match self.store.recall(batch.session_id()) {
+            Ok(record) => record,
+            Err(failure) => {
+                return Err(PerformanceFailure {
+                    report_failure: ReportFailure::Unrecorded(failure),
+                    report_fault_vector,
+                });
+            }
+        };
+        let configuration = match self.store.configuration() {
+            Ok(configuration) => configuration,
+            Err(failure) => {
+                return Err(PerformanceFailure {
+                    report_failure: ReportFailure::Unrecorded(failure),
+                    report_fault_vector,
+                });
+            }
+        };
+        let mut records = match self.store.recall_all() {
+            Ok(records) => records,
+            Err(failure) => {
+                return Err(PerformanceFailure {
+                    report_failure: ReportFailure::Unrecorded(failure),
+                    report_fault_vector,
+                });
+            }
+        };
+        let mut plan = match batch.fold(previous_record.clone()) {
+            Ok(plan) => plan,
+            Err(failure) => {
+                return Err(PerformanceFailure {
+                    report_failure: ReportFailure::FoldRefused(failure),
+                    report_fault_vector,
+                });
+            }
+        };
+        let projected_record = match &plan.session_change {
+            crate::generated::folding::SessionChange::Registered(record)
+            | crate::generated::folding::SessionChange::Updated(record) => record.clone(),
+        };
+        if let Some(record) = records
+            .iter_mut()
+            .find(|record| record.session_id == projected_record.session_id)
+        {
+            *record = projected_record.clone();
+        } else {
+            records.push(projected_record.clone());
+        }
+        let watch_plan = self
+            .sessions_watch
+            .planned(configuration.sessions_directories_option, records);
+        let watch_failure_vector = self.sessions_watch.staged(watch_plan.clone());
+        for failure in &watch_failure_vector {
+            if failure.watch_target_option != Some(WatchTarget::RolloutFile) {
+                continue;
+            }
+            let file_path_vector = failure.file_path_option.clone().map_or_else(
+                || {
+                    watch_plan
+                        .watch_placement_vector
+                        .iter()
+                        .filter(|placement| placement.watch_target == WatchTarget::RolloutFile)
+                        .map(|placement| placement.file_path.clone())
+                        .collect()
+                },
+                |file_path| vec![file_path],
+            );
+            for file_path in file_path_vector {
+                report_fault_vector.push(ReportFault::Unwatched(RolloutWatchFailure {
+                    file_path,
+                    diagnostic: failure.diagnostic.clone(),
+                }));
+            }
+        }
+        let projected_rollout_path = match &projected_record.rollout {
+            Rollout::Watched(watch) => Some(watch.file_path.clone()),
+            Rollout::Pending(file_path) => Some(file_path.clone()),
+            Rollout::Unlocated => None,
+        };
+        if projected_rollout_path.as_ref().is_some_and(|path| {
+            let already_watched_at_path = previous_record.as_ref().is_some_and(|record| {
+                matches!(
+                    &record.rollout,
+                    Rollout::Watched(watch) if watch.file_path == *path
+                )
+            });
+            !already_watched_at_path
+                && watch_failure_vector.iter().any(|failure| {
+                    failure.watch_target_option == Some(WatchTarget::RolloutFile)
+                        && failure.file_path_option.as_ref() == Some(path)
+                })
+        }) {
+            if let Some(path) = projected_rollout_path {
+                batch.rollout_option = Some(Rollout::Pending(path));
+                attached = None;
+                plan = match batch.fold(previous_record.clone()) {
+                    Ok(plan) => plan,
+                    Err(failure) => {
+                        self.sessions_watch.discarded();
+                        return Err(PerformanceFailure {
+                            report_failure: ReportFailure::FoldRefused(failure),
+                            report_fault_vector,
+                        });
+                    }
+                };
+            }
+        }
+        let changes = match self.store.commit(plan) {
+            Ok(changes) => changes,
+            Err(failure) => {
+                self.sessions_watch.discarded();
+                return Err(PerformanceFailure {
+                    report_failure: ReportFailure::Unrecorded(failure),
+                    report_fault_vector,
+                });
+            }
+        };
+        self.sessions_watch.merged(watch_plan, watch_failure_vector);
+        self.publish(changes.clone());
+        let mut performed = Performed {
+            changed_vector: changes,
+            report_fault_vector,
+        };
         if let Some(path) = explicit_path.filter(|path| Path::new(&path.0).exists()) {
             let path_unwatched = performed.report_fault_vector.iter().any(|fault| {
                 matches!(fault, ReportFault::Unwatched(failure) if failure.file_path == path)
@@ -399,19 +439,31 @@ where
                             .report_fault_vector
                             .extend(discovered.report_fault_vector);
                     }
-                    Err(ReportFailure::LaneFailed(lane_failure)) => performed
-                        .report_fault_vector
-                        .push(ReportFault::LaneFailed(lane_failure)),
-                    Err(ReportFailure::Unreadable(failure)) => performed
-                        .report_fault_vector
-                        .push(ReportFault::Unread(failure)),
-                    Err(ReportFailure::Unrecorded(failure)) => performed
-                        .report_fault_vector
-                        .push(ReportFault::MemoryFault(failure)),
-                    Err(ReportFailure::FoldRefused(failure)) => performed
-                        .report_fault_vector
-                        .push(ReportFault::FoldRefusal(failure)),
-                    Err(failure) => return Err(failure),
+                    Err(mut failure) => {
+                        performed
+                            .report_fault_vector
+                            .append(&mut failure.report_fault_vector);
+                        match failure.report_failure {
+                            ReportFailure::LaneFailed(lane_failure) => performed
+                                .report_fault_vector
+                                .push(ReportFault::LaneFailed(lane_failure)),
+                            ReportFailure::Unreadable(unreadable) => performed
+                                .report_fault_vector
+                                .push(ReportFault::Unread(unreadable)),
+                            ReportFailure::Unrecorded(memory_fault) => performed
+                                .report_fault_vector
+                                .push(ReportFault::MemoryFault(memory_fault)),
+                            ReportFailure::FoldRefused(fold_refusal) => performed
+                                .report_fault_vector
+                                .push(ReportFault::FoldRefusal(fold_refusal)),
+                            report_failure => {
+                                return Err(PerformanceFailure {
+                                    report_failure,
+                                    report_fault_vector: performed.report_fault_vector,
+                                });
+                            }
+                        }
+                    }
                 }
             }
         } else if let Some(watch) = attached {
@@ -422,19 +474,31 @@ where
                         .report_fault_vector
                         .extend(read.report_fault_vector);
                 }
-                Err(ReportFailure::LaneFailed(lane_failure)) => performed
-                    .report_fault_vector
-                    .push(ReportFault::LaneFailed(lane_failure)),
-                Err(ReportFailure::Unreadable(failure)) => performed
-                    .report_fault_vector
-                    .push(ReportFault::Unread(failure)),
-                Err(ReportFailure::Unrecorded(failure)) => performed
-                    .report_fault_vector
-                    .push(ReportFault::MemoryFault(failure)),
-                Err(ReportFailure::FoldRefused(failure)) => performed
-                    .report_fault_vector
-                    .push(ReportFault::FoldRefusal(failure)),
-                Err(failure) => return Err(failure),
+                Err(mut failure) => {
+                    performed
+                        .report_fault_vector
+                        .append(&mut failure.report_fault_vector);
+                    match failure.report_failure {
+                        ReportFailure::LaneFailed(lane_failure) => performed
+                            .report_fault_vector
+                            .push(ReportFault::LaneFailed(lane_failure)),
+                        ReportFailure::Unreadable(unreadable) => performed
+                            .report_fault_vector
+                            .push(ReportFault::Unread(unreadable)),
+                        ReportFailure::Unrecorded(memory_fault) => performed
+                            .report_fault_vector
+                            .push(ReportFault::MemoryFault(memory_fault)),
+                        ReportFailure::FoldRefused(fold_refusal) => performed
+                            .report_fault_vector
+                            .push(ReportFault::FoldRefusal(fold_refusal)),
+                        report_failure => {
+                            return Err(PerformanceFailure {
+                                report_failure,
+                                report_fault_vector: performed.report_fault_vector,
+                            });
+                        }
+                    }
+                }
             }
         }
         Ok(performed)
@@ -623,12 +687,12 @@ where
     }
 
     fn follow_watch(&mut self, word: WatchWord) -> Vec<WatchConsequence> {
-        if !self
-            .sessions_watch
-            .current
-            .as_ref()
-            .is_some_and(|watch| watch.generation == word.watch_generation)
-        {
+        if !self.sessions_watch.current.as_ref().is_some_and(|current| {
+            current.iter().any(|watch| {
+                watch.lifecycle == WatchLifecycle::Active
+                    && watch.generation == word.watch_generation
+            })
+        }) {
             return vec![];
         }
         let event = match word.watch_result {
@@ -639,17 +703,42 @@ where
         };
         let before_awaited = self.sessions_watch.awaited();
         let before_unwatchable = self.sessions_watch.unwatchable();
-        let (unplaced, written, failures, after_awaited) = {
-            let Some(watch) = self.sessions_watch.current.as_mut() else {
+        let (unplaced, written, failures, after_awaited, source_target) = {
+            let Some(current) = self.sessions_watch.current.as_mut() else {
                 return vec![];
             };
+            let Some(watch) = current.iter_mut().find(|watch| {
+                watch.lifecycle == WatchLifecycle::Active
+                    && watch.generation == word.watch_generation
+            }) else {
+                return vec![];
+            };
+            let source_target = watch
+                .placements
+                .first()
+                .map(|placement| placement.watch_target.clone());
             watch.forget(event.clone());
             let unplaced = watch.awaited();
             let written = watch.written(event);
             let failures = watch.settle();
             let after_awaited = watch.awaited();
-            (unplaced, written, failures, after_awaited)
+            (unplaced, written, failures, after_awaited, source_target)
         };
+        let mut written = written;
+        if source_target == Some(WatchTarget::SessionsDirectory) {
+            let rollout_paths: Vec<FilePath> = self
+                .sessions_watch
+                .current
+                .as_ref()
+                .into_iter()
+                .flatten()
+                .filter(|watch| watch.lifecycle == WatchLifecycle::Active)
+                .flat_map(|watch| watch.placements.iter())
+                .filter(|placement| placement.watch_target == WatchTarget::RolloutFile)
+                .map(|placement| placement.file_path.clone())
+                .collect();
+            written.retain(|file_path| !rollout_paths.contains(file_path));
+        }
         let after_unwatchable = self.sessions_watch.unwatchable();
         if let Some(publisher) = self.configurations.as_ref() {
             if before_awaited != after_awaited {
@@ -743,11 +832,11 @@ where
         self.open_public()
     }
 
-    fn perform<N: Operable>(&mut self, input: N) -> Result<Performed, ReportFailure> {
+    fn perform<N: Operable>(&mut self, input: N) -> Result<Performed, PerformanceFailure> {
         Performing::perform(self, input)
     }
 
-    fn report<N: Reportable>(&mut self, input: N) -> Result<Performed, ReportFailure> {
+    fn report<N: Reportable>(&mut self, input: N) -> Result<Performed, PerformanceFailure> {
         Performing::perform(self, input.hook())
     }
 
@@ -835,8 +924,8 @@ actor_message!(FollowWatchRequest, Vec<WatchConsequence>, {
 });
 actor_message!(OpenPublicRequest, Result<Opened, NexusControlFailure>, { NexusRuntime::open_public(self) });
 actor_message!(InitializeRequest, Result<Opened, NexusControlFailure>, { NexusRuntime::initialize(self) });
-actor_message!(PerformRequest, Result<Performed, ReportFailure>, { NexusRuntime::perform(self, message.operation) });
-actor_message!(ReportRequest, Result<Performed, ReportFailure>, { NexusRuntime::report(self, message.hook) });
+actor_message!(PerformRequest, Result<Performed, PerformanceFailure>, { NexusRuntime::perform(self, message.operation) });
+actor_message!(ReportRequest, Result<Performed, PerformanceFailure>, { NexusRuntime::report(self, message.hook) });
 actor_message!(
     SubscribeObservationsRequest,
     Result<signal::Stream<Observations, Changed>, ReportFailure>,
@@ -919,23 +1008,27 @@ where
             .map_err(ActorFailure::from)?
     }
 
-    fn perform<N: Operable>(&self, input: N) -> Result<Performed, ReportFailure> {
+    fn perform<N: Operable>(&self, input: N) -> Result<Performed, PerformanceFailure> {
         self.actor
             .ask(PerformRequest {
                 operation: input.operation(),
             })
             .blocking_send()
             .map_err(|failure| {
-                ReportFailure::ActorUnavailable(Diagnostic(format!("{failure:?}")))
+                PerformanceFailure::from(ReportFailure::ActorUnavailable(Diagnostic(format!(
+                    "{failure:?}"
+                ))))
             })?
     }
 
-    fn report<N: Reportable>(&self, input: N) -> Result<Performed, ReportFailure> {
+    fn report<N: Reportable>(&self, input: N) -> Result<Performed, PerformanceFailure> {
         self.actor
             .ask(ReportRequest { hook: input.hook() })
             .blocking_send()
             .map_err(|failure| {
-                ReportFailure::ActorUnavailable(Diagnostic(format!("{failure:?}")))
+                PerformanceFailure::from(ReportFailure::ActorUnavailable(Diagnostic(format!(
+                    "{failure:?}"
+                ))))
             })?
     }
 
@@ -983,12 +1076,7 @@ where
                 report_fault_vector,
                 ..
             }) => Err(Output::ReportedWithFaults(report_fault_vector)),
-            Err(ReportFailure::Unreadable(failure)) => {
-                Err(Output::ReportedWithFaults(vec![ReportFault::Unread(
-                    failure,
-                )]))
-            }
-            Err(failure) => Err(Output::ReportRefused(failure)),
+            Err(failure) => Err(Output::ReportRefused(failure.report_failure)),
         }
     }
 

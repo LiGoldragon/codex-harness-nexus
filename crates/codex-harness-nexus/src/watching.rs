@@ -20,14 +20,15 @@ use signal_codex_harness_nexus::Diagnostic;
 
 use crate::generated::actor::{
     Placement, PlacementPositioning, PlacementState, Reach, ReachCoverage, Settling,
-    WatchChangeKind, WatchEvent, WatchFailure, WatchGeneration, WatchPlacement, WatchPlan,
-    WatchPlanBuilding, WatchResult, WatchTarget, WatchWord,
+    WatchChangeKind, WatchEvent, WatchFailure, WatchGeneration, WatchLifecycle, WatchOpening,
+    WatchPlacement, WatchPlan, WatchPlanBuilding, WatchResult, WatchTarget, WatchWord,
 };
 use crate::generated::memory::{Rollout, SessionRecord};
 
 /// One native kernel watcher plus its typed target placements.
 pub struct DirectoryWatch {
     pub generation: WatchGeneration,
+    pub lifecycle: WatchLifecycle,
     pub watcher: RecommendedWatcher,
     pub placements: Vec<Placement>,
     pub watched: BTreeMap<PathBuf, Reach>,
@@ -38,7 +39,7 @@ pub struct DirectoryWatch {
 pub struct SessionsWatch {
     pub sender: Sender<WatchWord>,
     pub drawn: WatchGeneration,
-    pub current: Option<DirectoryWatch>,
+    pub current: Option<Vec<DirectoryWatch>>,
     pub unwatchable: Vec<UnwatchableDirectory>,
 }
 
@@ -166,7 +167,14 @@ impl Settling for DirectoryWatch {
                             self.watched.insert(resting.clone(), reach);
                         }
                         Err(error) if matches!(error.kind, notify::ErrorKind::PathNotFound) => {
-                            moved = true;
+                            let failure = WatchFailure {
+                                watch_target_option: Some(target.watch_target),
+                                file_path_option: Some(target.file_path),
+                                diagnostic: Diagnostic(error.to_string()),
+                            };
+                            if !failures.contains(&failure) {
+                                failures.push(failure);
+                            }
                             continue;
                         }
                         Err(error) => {
@@ -274,19 +282,15 @@ impl Settling for DirectoryWatch {
     }
 }
 
-impl crate::generated::actor::SessionsWatching for SessionsWatch {
-    fn opened(&mut self, plan: WatchPlan) -> Result<Option<DirectoryWatch>, UnwatchableDirectory> {
-        if plan.watch_placement_vector.is_empty() {
-            return Ok(None);
-        }
-        let first = plan.watch_placement_vector[0].file_path.clone();
+impl WatchOpening for SessionsWatch {
+    fn watch(&mut self, placement: WatchPlacement) -> Result<DirectoryWatch, WatchFailure> {
+        let failed = |diagnostic: String| WatchFailure {
+            watch_target_option: Some(placement.watch_target.clone()),
+            file_path_option: Some(placement.file_path.clone()),
+            diagnostic: Diagnostic(diagnostic),
+        };
         let Some(next_generation) = self.drawn.0.checked_add(1) else {
-            return Err(UnwatchableDirectory {
-                file_path: first,
-                diagnostic: meta_signal_codex_harness_nexus::Diagnostic(
-                    "watch generation exhausted".to_owned(),
-                ),
-            });
+            return Err(failed("watch generation exhausted".to_owned()));
         };
         self.drawn = WatchGeneration(next_generation);
         let generation = self.drawn;
@@ -297,90 +301,205 @@ impl crate::generated::actor::SessionsWatching for SessionsWatch {
                 watch_result: event.into(),
             });
         })
-        .map_err(|error| UnwatchableDirectory {
-            file_path: first,
-            diagnostic: meta_signal_codex_harness_nexus::Diagnostic(error.to_string()),
-        })?;
+        .map_err(|error| failed(error.to_string()))?;
         let mut watch = DirectoryWatch {
             generation,
+            lifecycle: WatchLifecycle::Staged,
             watcher,
-            placements: plan
-                .watch_placement_vector
-                .into_iter()
-                .map(PlacementPositioning::placed)
-                .collect(),
+            placements: vec![placement.placed()],
             watched: BTreeMap::new(),
             failures: Vec::new(),
         };
-        let failures = watch.settle();
-        if let Some(failure) = failures
+        if let Some(failure) = watch.settle().into_iter().next() {
+            Err(failure)
+        } else {
+            Ok(watch)
+        }
+    }
+}
+
+impl crate::generated::actor::SessionsWatching for SessionsWatch {
+    fn opened(
+        &mut self,
+        plan: WatchPlan,
+    ) -> Result<Option<Vec<DirectoryWatch>>, UnwatchableDirectory> {
+        let mut watch_vector = Vec::new();
+        for placement in plan.watch_placement_vector {
+            match self.watch(placement.clone()) {
+                Ok(mut watch) => {
+                    watch.lifecycle = WatchLifecycle::Active;
+                    watch_vector.push(watch);
+                }
+                Err(failure) if placement.watch_target == WatchTarget::SessionsDirectory => {
+                    return Err(UnwatchableDirectory {
+                        file_path: failure.file_path_option.unwrap_or(placement.file_path),
+                        diagnostic: meta_signal_codex_harness_nexus::Diagnostic(
+                            failure.diagnostic.0,
+                        ),
+                    });
+                }
+                Err(_) => {}
+            }
+        }
+        Ok((!watch_vector.is_empty()).then_some(watch_vector))
+    }
+
+    fn replaced(&mut self, watch_vector_option: Option<Vec<DirectoryWatch>>) {
+        self.current = watch_vector_option;
+    }
+
+    fn staged(&mut self, plan: WatchPlan) -> Vec<WatchFailure> {
+        let mut failure_vector = Vec::new();
+        for placement in &plan.watch_placement_vector {
+            let wanted = placement.placed();
+            let current_placement_is_healthy =
+                self.current.as_ref().into_iter().flatten().any(|watch| {
+                    watch.lifecycle == WatchLifecycle::Active
+                        && watch.failures.is_empty()
+                        && watch.placements.iter().any(|active| {
+                            active.file_path == placement.file_path
+                                && active.watch_target == placement.watch_target
+                                && active == &wanted
+                        })
+                        && wanted.file_path_option.as_ref().is_some_and(|resting| {
+                            watch
+                                .watched
+                                .get(Path::new(&resting.0))
+                                .is_some_and(|reach| reach.reaches(wanted.reach()))
+                        })
+                });
+            if current_placement_is_healthy {
+                continue;
+            }
+            match self.watch(placement.clone()) {
+                Ok(watch) => self.current.get_or_insert_with(Vec::new).push(watch),
+                Err(failure) => failure_vector.push(failure),
+            }
+        }
+        failure_vector
+    }
+
+    fn merged(&mut self, plan: WatchPlan, failure_vector: Vec<WatchFailure>) {
+        let mut current = self.current.take().unwrap_or_default();
+        let mut candidate_vector: Vec<DirectoryWatch> = current
+            .drain(..)
+            .filter(|watch| watch.lifecycle == WatchLifecycle::Staged)
+            .collect();
+        current.retain(|watch| {
+            watch.placements.iter().any(|active| {
+                plan.watch_placement_vector.iter().any(|planned| {
+                    active.file_path == planned.file_path
+                        && active.watch_target == planned.watch_target
+                })
+            })
+        });
+        for mut candidate in candidate_vector.drain(..) {
+            if let Some(placement) = candidate.placements.first() {
+                current.retain(|active| {
+                    !active.placements.iter().any(|existing| {
+                        existing.file_path == placement.file_path
+                            && existing.watch_target == placement.watch_target
+                    })
+                });
+                candidate.lifecycle = WatchLifecycle::Active;
+                current.push(candidate);
+            }
+        }
+        self.current = (!current.is_empty()).then_some(current);
+
+        let planned_session_paths: Vec<FilePath> = plan
+            .watch_placement_vector
             .iter()
-            .find(|failure| failure.watch_target_option == Some(WatchTarget::SessionsDirectory))
-        {
-            return Err(UnwatchableDirectory {
-                file_path: failure.file_path_option.clone().unwrap_or(first),
-                diagnostic: meta_signal_codex_harness_nexus::Diagnostic(
-                    failure.diagnostic.0.clone(),
-                ),
+            .filter(|placement| placement.watch_target == WatchTarget::SessionsDirectory)
+            .map(|placement| placement.file_path.clone())
+            .collect();
+        self.unwatchable.retain(|directory| {
+            planned_session_paths.contains(&directory.file_path)
+                && !self.current.as_ref().is_some_and(|current| {
+                    plan.watch_placement_vector
+                        .iter()
+                        .filter(|planned| {
+                            planned.watch_target == WatchTarget::SessionsDirectory
+                                && planned.file_path == directory.file_path
+                        })
+                        .any(|planned| {
+                            let wanted = planned.placed();
+                            current.iter().any(|watch| {
+                                watch.lifecycle == WatchLifecycle::Active
+                                    && watch.failures.is_empty()
+                                    && watch.placements.contains(&wanted)
+                                    && wanted.file_path_option.as_ref().is_some_and(|resting| {
+                                        watch
+                                            .watched
+                                            .get(Path::new(&resting.0))
+                                            .is_some_and(|reach| reach.reaches(wanted.reach()))
+                                    })
+                            })
+                        })
+                })
+        });
+        for failure in failure_vector {
+            if failure.watch_target_option != Some(WatchTarget::SessionsDirectory) {
+                continue;
+            }
+            let Some(file_path) = failure.file_path_option else {
+                continue;
+            };
+            self.unwatchable
+                .retain(|directory| directory.file_path != file_path);
+            self.unwatchable.push(UnwatchableDirectory {
+                file_path,
+                diagnostic: meta_signal_codex_harness_nexus::Diagnostic(failure.diagnostic.0),
             });
         }
-        Ok(Some(watch))
     }
 
-    fn replaced(&mut self, watch: Option<DirectoryWatch>) {
-        self.current = watch;
-    }
-
-    fn retarget(&mut self, plan: WatchPlan) -> Vec<WatchFailure> {
-        match self.current.as_mut() {
-            Some(current) => {
-                current.placements = plan
-                    .watch_placement_vector
-                    .into_iter()
-                    .map(PlacementPositioning::placed)
-                    .collect();
-                current.settle()
-            }
-            None => match self.opened(plan) {
-                Ok(watch) => {
-                    self.replaced(watch);
-                    self.current
-                        .as_ref()
-                        .map_or_else(Vec::new, |watch| watch.failures.clone())
-                }
-                Err(failure) => vec![WatchFailure {
-                    watch_target_option: Some(WatchTarget::SessionsDirectory),
-                    file_path_option: Some(failure.file_path),
-                    diagnostic: Diagnostic(failure.diagnostic.0),
-                }],
-            },
+    fn discarded(&mut self) {
+        if let Some(current) = self.current.as_mut() {
+            current.retain(|watch| watch.lifecycle == WatchLifecycle::Active);
+        }
+        if self.current.as_ref().is_some_and(Vec::is_empty) {
+            self.current = None;
         }
     }
 
     fn awaited(&self) -> AwaitedDirectories {
-        self.current
-            .as_ref()
-            .map_or_else(|| AwaitedDirectories(Vec::new()), Settling::awaited)
+        let mut directories = Vec::new();
+        for watch in self.current.as_ref().into_iter().flatten() {
+            if watch.lifecycle != WatchLifecycle::Active {
+                continue;
+            }
+            for directory in watch.awaited().0 {
+                if !directories.contains(&directory) {
+                    directories.push(directory);
+                }
+            }
+        }
+        AwaitedDirectories(directories)
     }
 
     fn unwatchable(&self) -> UnwatchableDirectories {
         let mut directories = self.unwatchable.clone();
-        if let Some(current) = &self.current {
-            for failure in current.failures.iter().filter(|failure| {
-                failure.watch_target_option == Some(WatchTarget::SessionsDirectory)
-            }) {
-                let Some(file_path) = &failure.file_path_option else {
-                    continue;
-                };
-                let directory = UnwatchableDirectory {
-                    file_path: file_path.clone(),
-                    diagnostic: meta_signal_codex_harness_nexus::Diagnostic(
-                        failure.diagnostic.0.clone(),
-                    ),
-                };
-                if !directories.contains(&directory) {
-                    directories.push(directory);
-                }
+        for failure in self
+            .current
+            .as_ref()
+            .into_iter()
+            .flatten()
+            .filter(|watch| watch.lifecycle == WatchLifecycle::Active)
+            .flat_map(|watch| watch.failures.iter())
+            .filter(|failure| failure.watch_target_option == Some(WatchTarget::SessionsDirectory))
+        {
+            let Some(file_path) = &failure.file_path_option else {
+                continue;
+            };
+            let directory = UnwatchableDirectory {
+                file_path: file_path.clone(),
+                diagnostic: meta_signal_codex_harness_nexus::Diagnostic(
+                    failure.diagnostic.0.clone(),
+                ),
+            };
+            if !directories.contains(&directory) {
+                directories.push(directory);
             }
         }
         UnwatchableDirectories(directories)

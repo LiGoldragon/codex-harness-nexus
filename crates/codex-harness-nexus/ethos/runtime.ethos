@@ -8,7 +8,8 @@ Library
                                     SessionsDirectories Capacity ] ]
 [ ReadyConfiguration.{ FlowsRoot IdentityProducer SessionsDirectories
                        Capacity }
-  Performed.{ Vector<Changed> Vector<ReportFault> } ]   ; committed; every secondary fault accompanies its effect
+  Performed.{ Vector<Changed> Vector<ReportFault> }   ; committed; every secondary fault accompanies its effect
+  PerformanceFailure.{ ReportFailure Vector<ReportFault> } ] ; primary cause with earlier faults
 [ Diagnosing.[ diagnostic.[ Diagnostic ] ]
   Sessional.[ session_id.[ SessionId ] ]
   Operable.[ operation.[ Operation ] ]
@@ -19,7 +20,7 @@ Library
   Observing.[ publish!{ [ Vector<Changed> ] [] }
               prepare!{ [] [ Result<Capacity ReportFailure> ] } ]
   Attempting.[ attempt!{ [ Operable ] [ Result<Outcome ReportFailure> ] } ]
-  Performing.[ perform!{ [ Operable ] [ Result<Performed ReportFailure> ] } ]
+  Performing.[ perform!{ [ Operable ] [ Result<Performed PerformanceFailure> ] } ]
   Waking.[ startup!{ [] [ Result<Vector<Operation> ReportFailure> ] }
            woken!{ [ Vector<FilePath> ] [ Result<Vector<Operation> ReportFailure> ] } ]
   Remembering.[ recall.{ [ Sessional ] [ Result<Option<SessionRecord> MemoryFault> ] }

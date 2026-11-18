@@ -11,6 +11,13 @@ pub struct WatchGeneration(pub i64);
 #[rustfmt::skip]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub enum WatchLifecycle {
+    Active,
+    Staged,
+}
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub enum WatchChangeKind {
     CreatedFolder,
     Created,
@@ -179,7 +186,7 @@ pub trait SessionsDirectoriesSetting {
 }
 #[rustfmt::skip]
 pub trait PlacementPositioning {
-    fn placed(&self, input: WatchPlacement) -> Placement;
+    fn placed(&self) -> Placement;
 }
 #[rustfmt::skip]
 pub trait PlacementState {
@@ -203,16 +210,25 @@ pub trait SessionsWatching {
         &mut self,
         input: WatchPlan,
     ) -> std::result::Result<
-        std::option::Option<codex_harness_nexus::DirectoryWatch>,
+        std::option::Option<std::vec::Vec<codex_harness_nexus::DirectoryWatch>>,
         meta_signal_codex_harness_nexus::UnwatchableDirectory,
     >;
     fn replaced(
         &mut self,
-        input: std::option::Option<codex_harness_nexus::DirectoryWatch>,
+        input: std::option::Option<std::vec::Vec<codex_harness_nexus::DirectoryWatch>>,
     );
-    fn retarget(&mut self, input: WatchPlan) -> std::vec::Vec<WatchFailure>;
+    fn staged(&mut self, input: WatchPlan) -> std::vec::Vec<WatchFailure>;
+    fn merged(&mut self, input_0: WatchPlan, input_1: std::vec::Vec<WatchFailure>);
+    fn discarded(&mut self);
     fn awaited(&self) -> meta_signal_codex_harness_nexus::AwaitedDirectories;
     fn unwatchable(&self) -> meta_signal_codex_harness_nexus::UnwatchableDirectories;
+}
+#[rustfmt::skip]
+pub trait WatchOpening {
+    fn watch(
+        &mut self,
+        input: WatchPlacement,
+    ) -> std::result::Result<codex_harness_nexus::DirectoryWatch, WatchFailure>;
 }
 #[rustfmt::skip]
 pub trait WatchPlanBuilding {
@@ -273,17 +289,11 @@ pub trait NexusPort {
     fn perform<N: runtime::Operable>(
         &self,
         input: N,
-    ) -> std::result::Result<
-        runtime::Performed,
-        signal_codex_harness_nexus::ReportFailure,
-    >;
+    ) -> std::result::Result<runtime::Performed, runtime::PerformanceFailure>;
     fn report<N: Reportable>(
         &self,
         input: N,
-    ) -> std::result::Result<
-        runtime::Performed,
-        signal_codex_harness_nexus::ReportFailure,
-    >;
+    ) -> std::result::Result<runtime::Performed, runtime::PerformanceFailure>;
     fn subscribe_observations(
         &self,
     ) -> std::result::Result<
@@ -328,17 +338,11 @@ pub trait NexusRuntime {
     fn perform<N: runtime::Operable>(
         &mut self,
         input: N,
-    ) -> std::result::Result<
-        runtime::Performed,
-        signal_codex_harness_nexus::ReportFailure,
-    >;
+    ) -> std::result::Result<runtime::Performed, runtime::PerformanceFailure>;
     fn report<N: Reportable>(
         &mut self,
         input: N,
-    ) -> std::result::Result<
-        runtime::Performed,
-        signal_codex_harness_nexus::ReportFailure,
-    >;
+    ) -> std::result::Result<runtime::Performed, runtime::PerformanceFailure>;
     fn subscribe_observations(
         &mut self,
     ) -> std::result::Result<
@@ -403,4 +407,6 @@ const _: () = {
     let _ = assert_sessionswatch_sessionswatching::<codex_harness_nexus::SessionsWatch>;
     fn assert_sessionswatch_watchplanbuilding<T: WatchPlanBuilding>() {}
     let _ = assert_sessionswatch_watchplanbuilding::<codex_harness_nexus::SessionsWatch>;
+    fn assert_sessionswatch_watchopening<T: WatchOpening>() {}
+    let _ = assert_sessionswatch_watchopening::<codex_harness_nexus::SessionsWatch>;
 };
