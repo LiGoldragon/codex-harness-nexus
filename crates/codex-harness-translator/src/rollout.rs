@@ -25,6 +25,9 @@ impl Interpretable for RowText {
         if !value.is_object() {
             return Err(ParseFailure::InvalidField(FieldPath("$".into())));
         }
+        if value.pointer("/type").and_then(serde_json::Value::as_str) != Some("event_msg") {
+            return Ok(Row::Other);
+        }
         match value
             .pointer("/payload/type")
             .and_then(serde_json::Value::as_str)

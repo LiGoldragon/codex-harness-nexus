@@ -49,7 +49,6 @@ impl Readying for Configuration {
             flows_root: self.flows_root_option.clone()?,
             identity_producer: self.identity_producer_option.clone()?,
             sessions_directories: self.sessions_directories_option.clone()?,
-            thread_databases: self.thread_databases_option.clone()?,
             capacity: self.capacity_option?,
         })
     }
@@ -134,6 +133,15 @@ where
                             ..
                         }),
                     ) => (None, None),
+                    // A repeated hook without a path preserves the path
+                    // already awaiting attachment, without another lookup.
+                    (
+                        Hook::SessionStart(start),
+                        Some(SessionRecord {
+                            rollout: Rollout::Pending(_),
+                            ..
+                        }),
+                    ) if start.file_path_option.is_none() => (None, None),
                     (Hook::SessionStart(start), _) => match &start.file_path_option {
                         Some(path) => (Some(Rollout::Pending(path.clone())), None),
                         None => match session.emit(&self.translator) {
@@ -179,6 +187,24 @@ where
                             watch.flow_id.0
                         )))
                     })?;
+                // Performing holds the serial lock through this check,
+                // the read, the fold and its commit. A startup snapshot
+                // taken before another reader committed cannot replay it.
+                let current_offset = match &record.rollout {
+                    Rollout::Watched(current) if current.file_path == watch.file_path => {
+                        Some(current.byte_offset)
+                    }
+                    _ => None,
+                };
+                if current_offset != Some(watch.byte_offset) {
+                    return Err(FoldRefusal::StaleReading(
+                        crate::generated::folding::StaleReading_Data {
+                            byte_offset: watch.byte_offset,
+                            byte_offset_option: current_offset,
+                        },
+                    )
+                    .into());
+                }
                 match watch.emit(&self.translator) {
                     RolloutReading_Data::Read(read) => Ok(Outcome::Read(EventBatch {
                         session: record.session,

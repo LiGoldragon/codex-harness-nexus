@@ -2,9 +2,7 @@
 
 use signal_codex_harness_nexus::Diagnostic;
 
-pub trait Diagnosing {
-    fn diagnostic(&self) -> Diagnostic;
-}
+pub use crate::generated::runtime::Diagnosing;
 
 impl<Failure: std::fmt::Display> Diagnosing for Failure {
     fn diagnostic(&self) -> Diagnostic {

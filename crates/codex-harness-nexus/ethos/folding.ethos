@@ -11,6 +11,7 @@ Library
                 IdentityMismatch.{ FlowId FlowId }
                 WatchIdentityMismatch.{ FlowId FlowId }
                 InvalidOffset.ByteOffset
-                OffsetReversed.{ ByteOffset ByteOffset } ] ]
+                OffsetReversed.{ ByteOffset ByteOffset }
+                StaleReading.{ ByteOffset Option<ByteOffset> } ] ]
 [ Folding.[ fold.{ [ Option<SessionRecord> ] [ Result<FoldPlan FoldRefusal> ] } ] ]
 [ EventBatch.[ Folding ] ]

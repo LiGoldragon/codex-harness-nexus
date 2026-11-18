@@ -11,7 +11,6 @@ pub struct ReadyConfiguration {
     pub flows_root: meta_signal_codex_harness_nexus::FlowsRoot,
     pub identity_producer: meta_signal_codex_harness_nexus::IdentityProducer,
     pub sessions_directories: meta_signal_codex_harness_nexus::SessionsDirectories,
-    pub thread_databases: meta_signal_codex_harness_nexus::ThreadDatabases,
     pub capacity: meta_signal_codex_harness_nexus::Capacity,
 }
 #[rustfmt::skip]
@@ -20,6 +19,10 @@ pub struct ReadyConfiguration {
 pub struct Performed {
     pub changed_vector: std::vec::Vec<signal_codex_harness_nexus::Changed>,
     pub lane_failure_option: std::option::Option<nexus_exchange::LaneFailure>,
+}
+#[rustfmt::skip]
+pub trait Diagnosing {
+    fn diagnostic(&self) -> signal_codex_harness_nexus::Diagnostic;
 }
 #[rustfmt::skip]
 pub trait Sessional {

@@ -6,11 +6,12 @@ Library
   nexus_exchange:LaneFailure
   signal_codex_harness_nexus:[ Hook ReportFailure Changed Diagnostic ]
   meta_signal_codex_harness_nexus:[ Set Configuration FlowsRoot IdentityProducer
-                                    SessionsDirectories ThreadDatabases Capacity ] ]
+                                    SessionsDirectories Capacity ] ]
 [ ReadyConfiguration.{ FlowsRoot IdentityProducer SessionsDirectories
-                       ThreadDatabases Capacity }
+                       Capacity }
   Performed.{ Vector<Changed> Option<LaneFailure> } ]   ; committed; the lane failed only where the effect did not need it
-[ Sessional.[ session.[ Session ] ]
+[ Diagnosing.[ diagnostic.[ Diagnostic ] ]
+  Sessional.[ session.[ Session ] ]
   Operable.[ operation.[ Operation ] ]
   Planned.[ plan.[ FoldPlan ] ]
   Settable.[ setting.[ Set ] ]

@@ -15,7 +15,7 @@ use codex_harness_nexus::{Diagnosing as _, Watch};
 use flow::FlowId;
 use harness::{FilePath, Observable, Session};
 use signal_codex_harness_nexus::{
-    ByteOffset, Diagnostic, IdentityFailure, Observation, Observation_Malformed_Data,
+    ByteOffset, Diagnostic, IdentityFailure, Observation, Observation_Malformed_Data, ParseFailure,
     ProducerOutput, Refused_Data,
 };
 
@@ -93,8 +93,10 @@ impl ReadingRows for [u8] {
         for line in self[..whole].split_inclusive(|byte| *byte == b'\n') {
             let row_offset = ByteOffset(offset.0 + start as i64);
             start += line.len();
-            let text = String::from_utf8_lossy(&line[..line.len() - 1]).into_owned();
-            match RowText(text).row() {
+            let row = std::str::from_utf8(&line[..line.len() - 1])
+                .map_err(|error| ParseFailure::InvalidJson(error.diagnostic()))
+                .and_then(|text| RowText(text.to_owned()).row());
+            match row {
                 Ok(row) => {
                     observation_vector.extend(row.events().into_iter().map(Observation::Event))
                 }

@@ -50,6 +50,13 @@ pub struct OffsetReversed_Data {
 #[rustfmt::skip]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct StaleReading_Data {
+    pub byte_offset: signal_codex_harness_nexus::ByteOffset,
+    pub byte_offset_option: std::option::Option<signal_codex_harness_nexus::ByteOffset>,
+}
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub enum FoldRefusal {
     Unregistered(harness::Session),
     SessionMismatch(SessionMismatch_Data),
@@ -57,6 +64,7 @@ pub enum FoldRefusal {
     WatchIdentityMismatch(WatchIdentityMismatch_Data),
     InvalidOffset(signal_codex_harness_nexus::ByteOffset),
     OffsetReversed(OffsetReversed_Data),
+    StaleReading(StaleReading_Data),
 }
 #[rustfmt::skip]
 pub trait Folding {
