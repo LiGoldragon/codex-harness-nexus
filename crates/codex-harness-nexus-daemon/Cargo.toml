@@ -17,6 +17,13 @@ nexus-exchange.workspace = true
 nexus-serving.workspace = true
 shared-translator.workspace = true
 tokio.workspace = true
+nix.workspace = true
+
+# The daemon: it reads its bootstrap from the pair launcher and serves the
+# Nexus.
+[[bin]]
+name = "codex-harness-nexus"
+path = "src/main.rs"
 
 [lints]
 workspace = true
