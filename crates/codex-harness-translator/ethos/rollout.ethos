@@ -1,12 +1,24 @@
 Library
 [ harness:[ Tokens Response Observable ]
-  signal_codex_harness_nexus:ParseFailure ]
-[ RowText.String
+  codex_harness_nexus:emission:RolloutReading_Data
+  signal_codex_harness_nexus:[ ParseFailure ByteOffset ] ]
+[ RolloutByte.Integer
+  RolloutLength.Integer
+  RolloutBytes.Vector<RolloutByte>
+  RowText.String
   Row.[ TaskStarted
         TokenCount.Option<Tokens>
         TaskComplete.Option<Response>
         TurnAborted
-        Other ] ]
-[ Interpretable.[ row.[ Result<Row ParseFailure> ] ] ]
+        Other ]
+  RolloutReadFailure.[ InvalidByteValue
+                       NegativeOffset.ByteOffset
+                       OffsetOverflow
+                       RolloutShorterThanOffset.{ RolloutLength ByteOffset } ] ]
+[ Interpretable.[ row.[ Result<Row ParseFailure> ] ]
+  ByteOffsetInput.[ byte_offset.[ ByteOffset ] ]
+  ReadingRows.[ rows.{ [ ByteOffsetInput ] [ RolloutReading_Data ] } ] ]
 [ Row.[ Observable ]
-  RowText.[ Interpretable ] ]
+  ByteOffset.[ ByteOffsetInput ]
+  RowText.[ Interpretable ]
+  RolloutBytes.[ ReadingRows ] ]

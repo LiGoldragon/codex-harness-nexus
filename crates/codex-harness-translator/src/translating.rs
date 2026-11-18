@@ -16,6 +16,8 @@ use translator_serving::{
     Settling, TextBudgeting, TextLimits, Translator, TranslatorBootstrap, ValidTextBudget,
 };
 
+use crate::settings_actor::{TextLimitsValidating, TranslatorBootstrapFailure};
+
 /// The translator's settings: the budget every ordinary request's text is
 /// read within, the translator's own setting on the meta socket.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -40,10 +42,10 @@ pub struct CodexHarnessTranslator {
 /// at the bootstrap's text limits, which the pair launcher takes from its
 /// configuration.
 impl TryFrom<&TranslatorBootstrap> for CodexHarnessTranslator {
-    type Error = &'static str;
+    type Error = TranslatorBootstrapFailure;
 
     fn try_from(bootstrap: &TranslatorBootstrap) -> Result<Self, Self::Error> {
-        let text_budget = ValidTextBudget::try_from(&bootstrap.text_limits)?;
+        let text_budget = bootstrap.text_limits.valid_budget()?;
         Ok(Self {
             settings: RwLock::new(TranslatorSettings { text_budget }),
         })

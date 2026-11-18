@@ -1,0 +1,32 @@
+Library
+[ meta_signal_codex_harness_nexus:[ TextBudget ConfigurationReadout Output ]
+  signal_codex_harness_nexus:Diagnostic
+  translator_serving:[ TextLimits ValidTextBudget ] ]
+[ TranslatorSettings.{ TextLimits }
+  TranslatorBootstrapFailure.[ InvalidNodeLimit InvalidDepthLimit
+                               SettingsRuntimeUnavailable.Diagnostic ]
+  TranslatorActorFailure.[ SettingsActorUnavailable.Diagnostic
+                           UnexpectedSettingsReply ]
+  MetaBudgetFailure.[ NodeLimitOutOfRange DepthLimitOutOfRange ]
+  SettingsCommand.[ ReadSettings
+                    SetTextBudget.TextBudget ]
+  SettingsReply.[ SettingsRead.TranslatorSettings
+                  TextBudgetSet.Output ] ]
+[ TextLimitsValidating.[ valid_budget.[ Result<ValidTextBudget TranslatorBootstrapFailure> ] ]
+  Limiting.[ text_limits.[ TextLimits ] ]
+  MetaBudgeting.[ meta_budget.[ Result<TextBudget MetaBudgetFailure> ] ]
+  TextBudgetInput.[ text_budget.[ TextBudget ] ]
+  ConfigurationReadoutInput.[ readout.[ ConfigurationReadout ] ]
+  BudgetMerging.[ with_text_budget:{ [ ConfigurationReadoutInput TextBudgetInput ]
+                                      [ ConfigurationReadout ] } ]
+  TextBudgetSetting.[ set_text_budget!{ [ TextBudgetInput ] [ Output ] } ]
+  SettingsReading.[ current_settings.[ Result<TranslatorSettings TranslatorActorFailure> ] ]
+  SettingsWriting.[ request_text_budget.{ [ TextBudgetInput ]
+                                          [ Result<Output TranslatorActorFailure> ] } ]
+  SettingsCommandHandling.[ handle!{ [ SettingsCommand ] [ SettingsReply ] } ] ]
+[ TextLimits.[ TextLimitsValidating ]
+  TextBudget.[ Limiting TextBudgetInput ]
+  ConfigurationReadout.[ ConfigurationReadoutInput ]
+  ValidTextBudget.[ MetaBudgeting ]
+  ConfigurationReadout.[ BudgetMerging ]
+  TranslatorSettings.[ TextBudgetSetting SettingsCommandHandling ] ]

@@ -16,6 +16,8 @@ datom = ["dep:datom-codec", "dep:protos", "codex-harness-nexus/datom", "harness/
 text = ["datom", "meta-signal-codex-harness-nexus/datom", "shared-translator/text", "translator-client/datom", "translator-serving/text"]
 
 [dependencies]
+kameo.workspace = true
+tokio.workspace = true
 codex-harness-nexus = { path = "../codex-harness-nexus" }
 harness.workspace = true
 flow.workspace = true

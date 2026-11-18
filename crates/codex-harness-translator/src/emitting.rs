@@ -19,7 +19,10 @@ use signal_codex_harness_nexus::{
     ProducerOutput, Refused_Data,
 };
 
-use crate::generated::rollout::{Interpretable, RowText};
+use crate::generated::rollout::{
+    ByteOffsetInput, Interpretable, ReadingRows, RolloutByte, RolloutBytes, RolloutLength,
+    RolloutReadFailure, RolloutShorterThanOffset_Data, RowText,
+};
 use crate::translating::CodexHarnessTranslator;
 
 /// Codex's own thread database is not read yet: a session whose hook names
@@ -78,20 +81,51 @@ impl Emittable<CodexHarnessTranslator> for ClaimIdentity_Data {
 
 /// The observations of every whole row after the offset, and the offset
 /// past the last of them; a row not yet ended waits for the next write.
-pub trait ReadingRows {
-    fn rows(&self, offset: ByteOffset) -> RolloutReading_Data;
+impl ByteOffsetInput for ByteOffset {
+    fn byte_offset(&self) -> ByteOffset {
+        *self
+    }
 }
 
-impl ReadingRows for [u8] {
-    fn rows(&self, offset: ByteOffset) -> RolloutReading_Data {
-        let whole = self
+impl ReadingRows for RolloutBytes {
+    fn rows<N: ByteOffsetInput>(&self, input: N) -> RolloutReading_Data {
+        let offset = input.byte_offset();
+        let bytes = self
+            .0
+            .iter()
+            .map(|byte| u8::try_from(byte.0))
+            .collect::<Result<Vec<_>, _>>();
+        let Ok(bytes) = bytes else {
+            return RolloutReading_Data::Unreadable(Diagnostic(format!(
+                "{:?}",
+                RolloutReadFailure::InvalidByteValue
+            )));
+        };
+        if offset.0 < 0 {
+            return RolloutReading_Data::Unreadable(Diagnostic(format!(
+                "{:?}",
+                RolloutReadFailure::NegativeOffset(offset)
+            )));
+        }
+        let whole = bytes
             .iter()
             .rposition(|byte| *byte == b'\n')
             .map_or(0, |last| last + 1);
         let mut observation_vector = vec![];
         let mut start = 0;
-        for line in self[..whole].split_inclusive(|byte| *byte == b'\n') {
-            let row_offset = ByteOffset(offset.0 + start as i64);
+        for line in bytes[..whole].split_inclusive(|byte| *byte == b'\n') {
+            let row_offset = match i64::try_from(start)
+                .ok()
+                .and_then(|delta| offset.0.checked_add(delta))
+            {
+                Some(row_offset) => ByteOffset(row_offset),
+                None => {
+                    return RolloutReading_Data::Unreadable(Diagnostic(format!(
+                        "{:?}",
+                        RolloutReadFailure::OffsetOverflow
+                    )));
+                }
+            };
             start += line.len();
             let row = std::str::from_utf8(&line[..line.len() - 1])
                 .map_err(|error| ParseFailure::InvalidJson(error.diagnostic()))
@@ -108,9 +142,18 @@ impl ReadingRows for [u8] {
                 }
             }
         }
+        let Some(byte_offset) = i64::try_from(whole)
+            .ok()
+            .and_then(|length| offset.0.checked_add(length))
+        else {
+            return RolloutReading_Data::Unreadable(Diagnostic(format!(
+                "{:?}",
+                RolloutReadFailure::OffsetOverflow
+            )));
+        };
         RolloutReading_Data::Read(RolloutReading_Data_Read_Data {
             observation_vector,
-            byte_offset: ByteOffset(offset.0 + whole as i64),
+            byte_offset: ByteOffset(byte_offset),
         })
     }
 }
@@ -121,8 +164,8 @@ impl Emittable<CodexHarnessTranslator> for Watch {
             |error: std::io::Error| RolloutReading_Data::Unreadable(error.diagnostic());
         let Ok(start) = u64::try_from(self.byte_offset.0) else {
             return RolloutReading_Data::Unreadable(Diagnostic(format!(
-                "negative offset {}",
-                self.byte_offset.0
+                "{:?}",
+                RolloutReadFailure::NegativeOffset(self.byte_offset)
             )));
         };
         let mut file = match File::open(&self.file_path.0) {
@@ -131,9 +174,18 @@ impl Emittable<CodexHarnessTranslator> for Watch {
         };
         match file.metadata() {
             Ok(metadata) if metadata.len() < start => {
+                let Ok(rollout_length) = i64::try_from(metadata.len()) else {
+                    return RolloutReading_Data::Unreadable(Diagnostic(format!(
+                        "{:?}",
+                        RolloutReadFailure::OffsetOverflow
+                    )));
+                };
                 return RolloutReading_Data::Unreadable(Diagnostic(format!(
-                    "the rollout is {} bytes, shorter than its offset {start}",
-                    metadata.len()
+                    "{:?}",
+                    RolloutReadFailure::RolloutShorterThanOffset(RolloutShorterThanOffset_Data {
+                        rollout_length: RolloutLength(rollout_length),
+                        byte_offset: self.byte_offset,
+                    })
                 )));
             }
             Ok(_) => {}
@@ -146,7 +198,13 @@ impl Emittable<CodexHarnessTranslator> for Watch {
         if let Err(error) = file.read_to_end(&mut bytes) {
             return unreadable(error);
         }
-        bytes.rows(self.byte_offset)
+        RolloutBytes(
+            bytes
+                .into_iter()
+                .map(|byte| RolloutByte(i64::from(byte)))
+                .collect(),
+        )
+        .rows(self.byte_offset)
     }
 }
 
