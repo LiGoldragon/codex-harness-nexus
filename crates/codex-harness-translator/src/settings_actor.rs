@@ -16,9 +16,7 @@ use meta_signal_codex_harness_nexus as meta;
 use signal_codex_harness_nexus::Diagnostic;
 use tokio::runtime::{Builder, Runtime};
 use tokio::task::JoinHandle;
-use translator_serving::{
-    DepthLimit, NodeLimit, TextBudgeting, TextLimits, TranslatorBootstrap, ValidTextBudget,
-};
+use translator_serving::{DepthLimit, NodeLimit, TextLimits, TranslatorBootstrap, ValidTextBudget};
 
 pub use crate::generated::translator_settings::*;
 
@@ -145,6 +143,18 @@ impl Limiting for meta::TextBudget {
     }
 }
 
+impl TextBudgetInput for meta::TextBudget {
+    fn text_budget(&self) -> meta::TextBudget {
+        self.clone()
+    }
+}
+
+impl ConfigurationReadoutInput for meta::ConfigurationReadout {
+    fn readout(&self) -> meta::ConfigurationReadout {
+        self.clone()
+    }
+}
+
 impl TextLimitsValidating for TextLimits {
     fn valid_budget(&self) -> Result<ValidTextBudget, TranslatorBootstrapFailure> {
         match ValidTextBudget::try_from(self) {
@@ -242,11 +252,5 @@ impl SettingsWriting for TranslatorSettingsActor {
                 Diagnostic(error.to_string()),
             )),
         }
-    }
-}
-
-impl TextBudgeting for ValidTextBudget {
-    fn text_budget(&self) -> ValidTextBudget {
-        *self
     }
 }
