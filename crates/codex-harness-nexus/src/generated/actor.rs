@@ -81,6 +81,58 @@ pub enum ListenerFailure {
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub struct Opened(pub bool);
 #[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct ReadConfigurationRequest {}
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct ConfigureRequest {
+    pub set: meta_signal_codex_harness_nexus::Set,
+}
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct WatchSessionsRequest {
+    pub sessions_directories: meta_signal_codex_harness_nexus::SessionsDirectories,
+}
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct FollowWatchRequest {
+    pub watch_word: WatchWord,
+}
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct OpenPublicRequest {}
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct PerformRequest {
+    pub operation: operation::Operation,
+}
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct ReportRequest {
+    pub hook: signal_codex_harness_nexus::Hook,
+}
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct SubscribeObservationsRequest {}
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct SubscribeConfigurationRequest {}
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct ActorFailure {
+    pub diagnostic: signal_codex_harness_nexus::Diagnostic,
+}
+#[rustfmt::skip]
 pub trait ConfigurationSetting {
     fn setting(&self) -> meta_signal_codex_harness_nexus::Set;
 }
@@ -117,6 +169,80 @@ pub trait PublicOpening {
     fn open_public(&self) -> std::result::Result<Opened, ListenerFailure>;
 }
 #[rustfmt::skip]
+pub trait WatchWordInput {
+    fn watch_word(&self) -> WatchWord;
+}
+#[rustfmt::skip]
+pub trait Reportable {
+    fn hook(&self) -> signal_codex_harness_nexus::Hook;
+}
+#[rustfmt::skip]
+pub trait ConfigurationReading {
+    fn readout(
+        &self,
+    ) -> std::result::Result<
+        meta_signal_codex_harness_nexus::ConfigurationReadout,
+        signal_codex_harness_nexus::Diagnostic,
+    >;
+}
+#[rustfmt::skip]
+pub trait NexusPort {
+    fn read_configuration(
+        &self,
+    ) -> std::result::Result<
+        meta_signal_codex_harness_nexus::ConfigurationReadout,
+        signal_codex_harness_nexus::Diagnostic,
+    >;
+    fn configure<N: ConfigurationSetting>(
+        &self,
+        input: N,
+    ) -> std::result::Result<
+        meta_signal_codex_harness_nexus::Configuration,
+        meta_signal_codex_harness_nexus::ConfigurationRefusal,
+    >;
+    fn watch_sessions<N: SessionsDirectoriesSetting>(
+        &self,
+        input: N,
+    ) -> std::option::Option<WatchFailure>;
+    fn follow_watch<N: WatchWordInput>(
+        &self,
+        input: N,
+    ) -> std::vec::Vec<WatchConsequence>;
+    fn open_public(&self) -> std::result::Result<Opened, ListenerFailure>;
+    fn perform<N: runtime::Operable>(
+        &self,
+        input: N,
+    ) -> std::result::Result<
+        runtime::Performed,
+        signal_codex_harness_nexus::ReportFailure,
+    >;
+    fn report<N: Reportable>(
+        &self,
+        input: N,
+    ) -> std::result::Result<
+        runtime::Performed,
+        signal_codex_harness_nexus::ReportFailure,
+    >;
+    fn subscribe_observations(
+        &self,
+    ) -> std::result::Result<
+        signal::Stream<
+            signal_codex_harness_nexus::Observations,
+            signal_codex_harness_nexus::Changed,
+        >,
+        signal_codex_harness_nexus::ReportFailure,
+    >;
+    fn subscribe_configuration(
+        &self,
+    ) -> std::result::Result<
+        signal::Stream<
+            meta_signal_codex_harness_nexus::ConfigurationReadout,
+            meta_signal_codex_harness_nexus::ConfigurationChange,
+        >,
+        meta_signal_codex_harness_nexus::ConfigurationRefusal,
+    >;
+}
+#[rustfmt::skip]
 pub trait NexusRuntime {
     fn read_configuration(
         &self,
@@ -142,6 +268,30 @@ pub trait NexusRuntime {
 const _: () = {
     fn assert_filepath_placementpositioning<T: PlacementPositioning>() {}
     let _ = assert_filepath_placementpositioning::<harness::FilePath>;
+};
+#[rustfmt::skip]
+const _: () = {
+    fn assert_set_configurationsetting<T: ConfigurationSetting>() {}
+    let _ = assert_set_configurationsetting::<meta_signal_codex_harness_nexus::Set>;
+};
+#[rustfmt::skip]
+const _: () = {
+    fn assert_sessionsdirectories_sessionsdirectoriessetting<
+        T: SessionsDirectoriesSetting,
+    >() {}
+    let _ = assert_sessionsdirectories_sessionsdirectoriessetting::<
+        meta_signal_codex_harness_nexus::SessionsDirectories,
+    >;
+};
+#[rustfmt::skip]
+const _: () = {
+    fn assert_watchword_watchwordinput<T: WatchWordInput>() {}
+    let _ = assert_watchword_watchwordinput::<WatchWord>;
+};
+#[rustfmt::skip]
+const _: () = {
+    fn assert_hook_reportable<T: Reportable>() {}
+    let _ = assert_hook_reportable::<signal_codex_harness_nexus::Hook>;
 };
 #[rustfmt::skip]
 const _: () = {

@@ -14,7 +14,10 @@ use signal_codex_harness_nexus::{Changed, Diagnostic};
 
 use crate::diagnosing::Diagnosing as _;
 use crate::generated::folding::SessionChange;
-use crate::generated::memory::{MalformedRecord, SessionRecord, StoredConfiguration};
+use crate::generated::memory::{
+    FamilyCatalog, MalformedRecord, SessionRecord, StoreFamilies, StoreOpener, StoreOpening,
+    StorePath, StoredConfiguration,
+};
 use crate::generated::runtime::{Planned, Remembering, Sessional, Settable};
 
 const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
@@ -42,33 +45,24 @@ impl EngineRecord for StoredConfiguration {
     }
 }
 
-/// A family names itself once, so it is declared and registered alike.
-pub trait Familial: Sized {
-    fn descriptor() -> TableDescriptor<Self>;
-}
-
-impl Familial for SessionRecord {
-    fn descriptor() -> TableDescriptor<Self> {
+impl FamilyCatalog for StoreFamilies {
+    fn session(&self) -> TableDescriptor<SessionRecord> {
         TableDescriptor::new(
             SESSIONS,
             FamilyName::new("codex-harness-session"),
             SchemaHash::for_label("codex-harness-session-v1"),
         )
     }
-}
 
-impl Familial for MalformedRecord {
-    fn descriptor() -> TableDescriptor<Self> {
+    fn malformed(&self) -> TableDescriptor<MalformedRecord> {
         TableDescriptor::new(
             MALFORMED,
             FamilyName::new("codex-harness-malformed-row"),
             SchemaHash::for_label("codex-harness-malformed-row-v1"),
         )
     }
-}
 
-impl Familial for StoredConfiguration {
-    fn descriptor() -> TableDescriptor<Self> {
+    fn configuration(&self) -> TableDescriptor<StoredConfiguration> {
         TableDescriptor::new(
             CONFIGURATION,
             FamilyName::new("codex-harness-configuration"),
@@ -85,31 +79,34 @@ pub struct Store {
     configuration: TableReference<StoredConfiguration>,
 }
 
-/// A store is opened at its path, every family declared in the open.
-pub trait Opening: Sized {
-    fn open(path: &Path) -> Result<Self, Diagnostic>;
+impl StorePath for harness::FilePath {
+    fn path(&self) -> harness::FilePath {
+        self.clone()
+    }
 }
 
-impl Opening for Store {
-    fn open(path: &Path) -> Result<Self, Diagnostic> {
+/// A store is opened at its path, every family declared in the open.
+impl StoreOpening for StoreOpener {
+    fn open<N: StorePath>(&self, input: N) -> Result<Store, Diagnostic> {
+        let path = Path::new(&input.path().0);
         if let Some(directory) = path.parent() {
             std::fs::create_dir_all(directory).map_err(|error| error.diagnostic())?;
         }
         let mut engine = Engine::open(
             EngineOpen::new(path, SCHEMA_VERSION)
-                .with_family(&SessionRecord::descriptor())
-                .with_family(&MalformedRecord::descriptor())
-                .with_family(&StoredConfiguration::descriptor()),
+                .with_family(&StoreFamilies {}.session())
+                .with_family(&StoreFamilies {}.malformed())
+                .with_family(&StoreFamilies {}.configuration()),
         )
         .map_err(|error| error.diagnostic())?;
         let sessions = engine
-            .register_table(SessionRecord::descriptor())
+            .register_table(StoreFamilies {}.session())
             .map_err(|error| error.diagnostic())?;
         let malformed = engine
-            .register_table(MalformedRecord::descriptor())
+            .register_table(StoreFamilies {}.malformed())
             .map_err(|error| error.diagnostic())?;
         let configuration = engine
-            .register_table(StoredConfiguration::descriptor())
+            .register_table(StoreFamilies {}.configuration())
             .map_err(|error| error.diagnostic())?;
         Ok(Self {
             engine,

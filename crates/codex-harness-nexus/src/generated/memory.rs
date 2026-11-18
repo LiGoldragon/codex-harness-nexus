@@ -42,3 +42,46 @@ pub struct MalformedRecord {
 pub struct StoredConfiguration {
     pub configuration: meta_signal_codex_harness_nexus::Configuration,
 }
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct StoreOpener {}
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct StoreFamilies {}
+#[rustfmt::skip]
+pub trait StorePath {
+    fn path(&self) -> harness::FilePath;
+}
+#[rustfmt::skip]
+pub trait StoreOpening {
+    fn open<N: StorePath>(
+        &self,
+        input: N,
+    ) -> std::result::Result<
+        codex_harness_nexus::Store,
+        signal_codex_harness_nexus::Diagnostic,
+    >;
+}
+#[rustfmt::skip]
+pub trait FamilyCatalog {
+    fn session(&self) -> memory_engine::TableDescriptor<SessionRecord>;
+    fn malformed(&self) -> memory_engine::TableDescriptor<MalformedRecord>;
+    fn configuration(&self) -> memory_engine::TableDescriptor<StoredConfiguration>;
+}
+#[rustfmt::skip]
+const _: () = {
+    fn assert_filepath_storepath<T: StorePath>() {}
+    let _ = assert_filepath_storepath::<harness::FilePath>;
+};
+#[rustfmt::skip]
+const _: () = {
+    fn assert_storeopener_storeopening<T: StoreOpening>() {}
+    let _ = assert_storeopener_storeopening::<StoreOpener>;
+};
+#[rustfmt::skip]
+const _: () = {
+    fn assert_storefamilies_familycatalog<T: FamilyCatalog>() {}
+    let _ = assert_storefamilies_familycatalog::<StoreFamilies>;
+};

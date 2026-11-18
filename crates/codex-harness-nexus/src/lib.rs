@@ -5,6 +5,7 @@
 //! take.
 
 extern crate self as folding;
+extern crate self as codex_harness_nexus;
 extern crate self as memory;
 extern crate self as operation;
 
@@ -33,6 +34,6 @@ pub use generated::memory::*;
 pub use generated::operation::*;
 pub use generated::runtime::*;
 pub use naming::CodexHarness;
-pub use nexus::{ConfigurationReading, HarnessNexus, Locking};
-pub use store::{Familial, Opening, Store};
+pub use nexus::{HarnessNexus, Locking};
+pub use store::Store;
 pub use watching::{DirectoryWatch, Replacing, SessionsWatch, Watching};

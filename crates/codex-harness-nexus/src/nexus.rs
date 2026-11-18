@@ -14,6 +14,7 @@ use signal_codex_harness_nexus::{
     Changed, Diagnostic, Hook, Observation, Observations, Output, ReportFailure,
 };
 
+use crate::generated::actor::ConfigurationReading;
 use crate::generated::emission::{
     ClaimIdentity_Data, Emittable, FlowsRoot, IdentityClaim_Data, IdentityProducer,
     RolloutFinding_Data, RolloutIdentity_Data, RolloutReading_Data,
@@ -56,10 +57,6 @@ impl Readying for Configuration {
 
 /// The configuration as it is read out: what is recorded, and the sessions
 /// directories recorded but not yet there, which the Nexus awaits.
-pub trait ConfigurationReading {
-    fn readout(&self) -> Result<ConfigurationReadout, Diagnostic>;
-}
-
 impl<Translator> ConfigurationReading for HarnessNexus<Translator> {
     fn readout(&self) -> Result<ConfigurationReadout, Diagnostic> {
         let configuration = self.store.configuration()?;

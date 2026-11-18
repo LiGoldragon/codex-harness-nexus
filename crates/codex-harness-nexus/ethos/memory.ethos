@@ -1,10 +1,22 @@
-Memory
+Library
 [ harness:[ FilePath Session Observed ]
   flow:[ FlowId ]
-  signal_codex_harness_nexus:[ ByteOffset ParseFailure ]
-  meta_signal_codex_harness_nexus:Configuration ]
+  signal_codex_harness_nexus:[ ByteOffset ParseFailure Diagnostic ]
+  meta_signal_codex_harness_nexus:Configuration
+  codex_harness_nexus:Store
+  memory_engine:[ TableDescriptor TableName FamilyName SchemaHash ] ]
 [ Watch.{ FlowId FilePath ByteOffset }
   Rollout.[ Watched.Watch Pending.FilePath Unlocated ]
   SessionRecord.{ Session Observed Rollout }
   MalformedRecord.{ FlowId ByteOffset ParseFailure }
-  StoredConfiguration.{ Configuration } ]
+  StoredConfiguration.{ Configuration }
+  StoreOpener.{}
+  StoreFamilies.{} ]
+[ StorePath.[ path.[ FilePath ] ]
+  StoreOpening.[ open.{ [ StorePath ] [ Result<Store Diagnostic> ] } ]
+  FamilyCatalog.[ session.[ TableDescriptor<SessionRecord> ]
+                  malformed.[ TableDescriptor<MalformedRecord> ]
+                  configuration.[ TableDescriptor<StoredConfiguration> ] ] ]
+[ FilePath.[ StorePath ]
+  StoreOpener.[ StoreOpening ]
+  StoreFamilies.[ FamilyCatalog ] ]

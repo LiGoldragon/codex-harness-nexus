@@ -1,8 +1,13 @@
 Library
 [ harness:[ FilePath ]
+  operation:Operation
+  runtime:[ Operable Performed ]
+  signal:Stream
+  signal_codex_harness_nexus:[ Changed Hook Observations ReportFailure ]
   meta_signal_codex_harness_nexus:[ Configuration ConfigurationReadout
-                                    AwaitedDirectories ConfigurationRefusal Set
-                                    SessionsDirectories UnwatchableDirectory ]
+                                    ConfigurationChange AwaitedDirectories
+                                    ConfigurationRefusal Set SessionsDirectories
+                                    UnwatchableDirectory ]
   signal_codex_harness_nexus:Diagnostic ]
 [ WatchGeneration.Integer
   WatchChangeKind.[ CreatedFolder Created Removed RenamedFrom Modified Other ]
@@ -14,7 +19,17 @@ Library
   Placement.{ FilePath Option<FilePath> }
   WatchConsequence.[ Written.Vector<FilePath> Arrived.Vector<FilePath> WatchFailure ]
   ListenerFailure.[ Meta.String Public.String ]
-  Opened.Boolean ]
+  Opened.Boolean
+  ReadConfigurationRequest.{}
+  ConfigureRequest.{ Set }
+  WatchSessionsRequest.{ SessionsDirectories }
+  FollowWatchRequest.{ WatchWord }
+  OpenPublicRequest.{}
+  PerformRequest.{ Operation }
+  ReportRequest.{ Hook }
+  SubscribeObservationsRequest.{}
+  SubscribeConfigurationRequest.{}
+  ActorFailure.{ Diagnostic } ]
 [ ConfigurationSetting.[ setting.[ Set ] ]
   SessionsDirectoriesSetting.[ sessions_directories.[ SessionsDirectories ] ]
   PlacementPositioning.[ placed.[ Placement ] ]
@@ -25,6 +40,20 @@ Library
               written.{ [ WatchEvent ] [ Vector<FilePath> ] }
               awaited.[ AwaitedDirectories ] ]
   PublicOpening.[ open_public.[ Result<Opened ListenerFailure> ] ]
+  WatchWordInput.[ watch_word.[ WatchWord ] ]
+  Reportable.[ hook.[ Hook ] ]
+  ConfigurationReading.[ readout.[ Result<ConfigurationReadout Diagnostic> ] ]
+  NexusPort.[ read_configuration.[ Result<ConfigurationReadout Diagnostic> ]
+              configure.{ [ ConfigurationSetting ]
+                          [ Result<Configuration ConfigurationRefusal> ] }
+              watch_sessions.{ [ SessionsDirectoriesSetting ] [ Option<WatchFailure> ] }
+              follow_watch.{ [ WatchWordInput ] [ Vector<WatchConsequence> ] }
+              open_public.[ Result<Opened ListenerFailure> ]
+              perform.{ [ Operable ] [ Result<Performed ReportFailure> ] }
+              report.{ [ Reportable ] [ Result<Performed ReportFailure> ] }
+              subscribe_observations.[ Result<Stream<Observations Changed> ReportFailure> ]
+              subscribe_configuration.[ Result<Stream<ConfigurationReadout ConfigurationChange>
+                                              ConfigurationRefusal> ] ]
   NexusRuntime.[ read_configuration.[ Result<ConfigurationReadout Diagnostic> ]
                   configure!{ [ ConfigurationSetting ]
                               [ Result<Configuration ConfigurationRefusal> ] }
@@ -33,5 +62,9 @@ Library
                   follow_watch!{ [ WatchWord ] [ Vector<WatchConsequence> ] }
                   open_public!{ [] [ Result<Opened ListenerFailure> ] } ] ]
 [ FilePath.[ PlacementPositioning ]
+  Set.[ ConfigurationSetting ]
+  SessionsDirectories.[ SessionsDirectoriesSetting ]
+  WatchWord.[ WatchWordInput ]
+  Hook.[ Reportable ]
   Placement.[ PlacementState ]
   Reach.[ ReachCoverage ] ]
