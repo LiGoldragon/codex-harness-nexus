@@ -20,6 +20,8 @@ meta-signal-codex-harness-nexus.workspace = true
 nexus.workspace = true
 memory-engine.workspace = true
 rkyv.workspace = true
+tokio.workspace = true
+futures-util.workspace = true
 datom-codec = { workspace = true, optional = true }
 protos = { workspace = true, optional = true }
 
