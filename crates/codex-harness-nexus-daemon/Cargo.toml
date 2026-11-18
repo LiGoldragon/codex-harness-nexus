@@ -1,6 +1,6 @@
 [package]
 name = "codex-harness-nexus-daemon"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.89"
 license = "MIT OR Apache-2.0"
@@ -8,7 +8,7 @@ repository = "https://github.com/LiGoldragon/codex-harness-nexus"
 publish = false
 
 [dependencies]
-codex-harness-nexus = { path = "../codex-harness-nexus" }
+codex-harness-nexus = { version = "0.2.0", path = "../codex-harness-nexus" }
 harness.workspace = true
 signal.workspace = true
 signal-codex-harness-nexus.workspace = true
