@@ -197,16 +197,17 @@ where
     fn perform<N: Operable>(&self, input: N) -> Result<Vec<Changed>, ReportFailure> {
         let changes = {
             let _serial = locked(&self.serial);
-            let batch = match self.attempt(input)? {
-                Outcome::Reported(batch) | Outcome::Read(batch) => batch,
-                Outcome::Discovered(Some(batch)) => batch,
-                Outcome::Discovered(None) => return Ok(vec![]),
-            };
-            let attached = match (&batch.rollout_option, batch.observation_vector.is_empty()) {
-                (Some(Rollout::Watched(watch)), true) if watch.byte_offset.0 == 0 => {
-                    Some(watch.clone())
+            // A discovery attaches a rollout; only that is read again at once.
+            let (batch, attached) = match self.attempt(input)? {
+                Outcome::Reported(batch) | Outcome::Read(batch) => (batch, None),
+                Outcome::Discovered(Some(batch)) => {
+                    let attached = match &batch.rollout_option {
+                        Some(Rollout::Watched(watch)) => Some(watch.clone()),
+                        _ => None,
+                    };
+                    (batch, attached)
                 }
-                _ => None,
+                Outcome::Discovered(None) => return Ok(vec![]),
             };
             let record = self.store.recall(batch.session()).map_err(unrecorded)?;
             let plan = batch.fold(record).map_err(fold_refused)?;
