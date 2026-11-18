@@ -14,6 +14,7 @@ use signal_codex_harness_nexus::{
     Changed, Diagnostic, Hook, Observation, Observations, Output, ReportFailure,
 };
 
+use crate::failing::LaneReporting as _;
 use crate::generated::emission::{
     ClaimIdentity_Data, Emittable, FlowsRoot, IdentityClaim_Data, IdentityProducer,
     RolloutFinding_Data, RolloutIdentity_Data, RolloutReading_Data,
@@ -117,6 +118,9 @@ where
                         IdentityClaim_Data::Unclaimed(failure) => {
                             return Err(ReportFailure::Unidentified(failure));
                         }
+                        IdentityClaim_Data::LaneFailed(lane_failure) => {
+                            return Err(lane_failure.report_failure());
+                        }
                     },
                     (None, _) => return Err(ReportFailure::Unregistered(session)),
                 };
@@ -134,6 +138,9 @@ where
                         None => match session.emit(&self.translator) {
                             RolloutFinding_Data::Found(path) => Rollout::Pending(path),
                             RolloutFinding_Data::Unfound => Rollout::Unlocated,
+                            RolloutFinding_Data::LaneFailed(lane_failure) => {
+                                return Err(lane_failure.report_failure());
+                            }
                         },
                     }),
                     _ => None,
@@ -172,6 +179,9 @@ where
                     RolloutReading_Data::Unreadable(diagnostic) => {
                         Err(ReportFailure::Unrecorded(diagnostic))
                     }
+                    RolloutReading_Data::LaneFailed(lane_failure) => {
+                        Err(lane_failure.report_failure())
+                    }
                 }
             }
             Operation::Discovering(path) => {
@@ -205,6 +215,9 @@ where
                         })
                         .map_or(Outcome::Discovered(None), attached)),
                     RolloutIdentity_Data::Unidentified => Ok(Outcome::Discovered(None)),
+                    RolloutIdentity_Data::LaneFailed(lane_failure) => {
+                        Err(lane_failure.report_failure())
+                    }
                 }
             }
         }

@@ -1,18 +1,19 @@
 //! The Codex Harness Nexus's translator as the shared serving runs it: its
-//! settings, its public and meta text over the Nexus's two contracts, its
-//! answer to each emission, and the bootstrap its Nexus is started with.
+//! settings, its public and meta text over the Nexus's two contracts, the
+//! text budget it carries into every configuration the Nexus reads out, and
+//! its answer to each emission.
 
 use std::sync::{PoisonError, RwLock};
 
+use codex_harness_nexus::CodexHarness;
 use codex_harness_nexus::emission::{Emission, Emittable as _, Outcome};
-use codex_harness_nexus::{CodexHarness, NexusBootstrap};
 use meta_signal_codex_harness_nexus as meta;
-use shared_translator::{Caller, PeerIdentity};
+use shared_translator::Caller;
+use signal::Frame;
 use signal_codex_harness_nexus::{Input, Output};
 use translator_serving::{
-    Answers, DepthLimit, EmissionAnswering, MetaTranslating, NexusFailure, NodeLimit,
-    PairLaunching, Pairing, PublicTranslating, Settling, TextBudgeting, TextLimits, Translator,
-    TranslatorBootstrap, ValidTextBudget,
+    DepthLimit, EmissionAnswering, MetaTranslating, NexusFailure, NodeLimit, PublicTranslating,
+    Settling, TextBudgeting, TextLimits, Translator, TranslatorBootstrap, ValidTextBudget,
 };
 
 /// The translator's settings: the budget every ordinary request's text is
@@ -64,6 +65,43 @@ impl Limiting for meta::TextBudget {
     }
 }
 
+/// A budget the shared serving validated, as the meta contract names it.
+pub trait MetaBudgeting {
+    fn meta_budget(&self) -> meta::TextBudget;
+}
+
+impl MetaBudgeting for ValidTextBudget {
+    fn meta_budget(&self) -> meta::TextBudget {
+        meta::TextBudget {
+            node_limit: meta::NodeLimit(
+                i64::try_from(self.nodes).expect("a valid node limit fits i64"),
+            ),
+            depth_limit: meta::DepthLimit(
+                i64::try_from(self.depth).expect("a valid depth limit fits i64"),
+            ),
+        }
+    }
+}
+
+/// A configuration the Nexus read out, with the translator's own setting
+/// as it stands: the Nexus holds no text budget, so the readout it sends
+/// has none until the translator writes its own in.
+pub trait BudgetMerging {
+    fn with_text_budget(self, text_budget: meta::TextBudget) -> Self;
+}
+
+impl BudgetMerging for meta::ConfigurationReadout {
+    fn with_text_budget(self, text_budget: meta::TextBudget) -> Self {
+        Self {
+            configuration: meta::Configuration {
+                text_budget_option: Some(text_budget),
+                ..self.configuration
+            },
+            awaited_directories: self.awaited_directories,
+        }
+    }
+}
+
 /// The translator's own setting, set on the meta socket.
 pub trait TextBudgetSetting {
     /// Sets the budget every later ordinary request is read within, or
@@ -94,7 +132,18 @@ impl Translator for CodexHarnessTranslator {
     type Ready = TranslatorSettings;
 
     fn ready(&self) -> Option<TranslatorSettings> {
-        Some(*self.settings.read().unwrap_or_else(PoisonError::into_inner))
+        Some(self.current_settings())
+    }
+}
+
+/// The translator's settings as they stand.
+pub trait SettingsReading {
+    fn current_settings(&self) -> TranslatorSettings;
+}
+
+impl SettingsReading for CodexHarnessTranslator {
+    fn current_settings(&self) -> TranslatorSettings {
+        *self.settings.read().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
@@ -107,15 +156,6 @@ impl PublicTranslating for CodexHarnessTranslator {
     type PublicCall = Input;
     type PublicResponse = Output;
 
-    /// A Subscribe is followed, each frame of its stream written back as it
-    /// comes; a Report is answered once.
-    fn answers(input: &Input) -> Answers {
-        match input {
-            Input::Subscribe => Answers::Followed,
-            Input::Report(_) => Answers::Once,
-        }
-    }
-
     fn public_call(_caller: Caller, input: Input) -> Input {
         input
     }
@@ -125,9 +165,11 @@ impl PublicTranslating for CodexHarnessTranslator {
     }
 }
 
-/// The text budget is the translator's own setting, answered here; every
-/// other setting, and the subscription, is the Nexus's, carried to its meta
-/// socket as it was read and its answer written back as it came.
+/// The text budget is the translator's own setting, answered here and
+/// carried into every subscription open; every other setting, and the
+/// subscription, is the Nexus's, carried to its meta socket as it was read,
+/// each answer written back as it came, a configuration it reads out with
+/// the translator's text budget written in.
 impl MetaTranslating for CodexHarnessTranslator {
     type MetaInput = meta::Input;
     type MetaOutput = meta::Output;
@@ -147,7 +189,7 @@ impl MetaTranslating for CodexHarnessTranslator {
                     Settling::Forwarded(meta::Input::Configure(nexus_setting))
                 }
             },
-            meta::Input::Subscribe => Settling::Forwarded(meta::Input::Subscribe),
+            meta::Input::Subscribe => Settling::Subscribed(meta::Input::Subscribe),
         }
     }
 
@@ -155,8 +197,32 @@ impl MetaTranslating for CodexHarnessTranslator {
         input
     }
 
-    fn meta_answered(response: meta::Output) -> Result<meta::Output, NexusFailure> {
-        Ok(response)
+    fn meta_answered(&self, response: meta::Output) -> Result<meta::Output, NexusFailure> {
+        let text_budget = self.current_settings().text_budget.meta_budget();
+        Ok(match response {
+            meta::Output::Subscribed(Frame::Opened(readout)) => {
+                meta::Output::Subscribed(Frame::Opened(readout.with_text_budget(text_budget)))
+            }
+            meta::Output::Subscribed(Frame::Lagged(readout)) => {
+                meta::Output::Subscribed(Frame::Lagged(readout.with_text_budget(text_budget)))
+            }
+            response @ (meta::Output::Configured(_)
+            | meta::Output::ConfigureRefused(_)
+            | meta::Output::Subscribed(Frame::Changed(_))) => response,
+        })
+    }
+
+    /// A text budget set is a change of the configuration every open
+    /// subscription follows; a refused one changed nothing.
+    fn announced(&self, answered: &meta::Output) -> Option<meta::Output> {
+        match answered {
+            meta::Output::Configured(set @ meta::Set::TextBudget(_)) => {
+                Some(meta::Output::Subscribed(Frame::Changed(
+                    meta::ConfigurationChange::Set(set.clone()),
+                )))
+            }
+            _ => None,
+        }
     }
 }
 
@@ -173,22 +239,5 @@ impl EmissionAnswering for CodexHarnessTranslator {
             Emission::ReadRollout(watch) => Outcome::RolloutReading(watch.emit(self)),
             Emission::IdentifyRollout(path) => Outcome::RolloutIdentity(path.emit(self)),
         }
-    }
-}
-
-/// The Nexus is started knowing its place, its admission and the translator
-/// process it is paired with.
-impl PairLaunching for CodexHarnessTranslator {
-    type NexusBootstrap = NexusBootstrap;
-
-    fn nexus_bootstrap(
-        pairing: &Pairing,
-        translator: PeerIdentity,
-    ) -> Result<NexusBootstrap, Box<dyn std::error::Error>> {
-        Ok(NexusBootstrap {
-            place: pairing.place.clone(),
-            admission: pairing.admission.clone(),
-            peer_identity: translator,
-        })
     }
 }

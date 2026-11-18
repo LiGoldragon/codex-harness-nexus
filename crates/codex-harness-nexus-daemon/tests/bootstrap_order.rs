@@ -6,10 +6,10 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use codex_harness_nexus_daemon::NexusBootstrap;
 use nexus_exchange::{
     Admission, FrameCapacityBytes, FrameDeadlineMilliseconds, RetryDelayMilliseconds,
 };
+use nexus_serving::{InstanceId, NexusBootstrap};
 use shared_translator::{
     FrameCapacity, FrameWriting, PeerIdentity, Place, PlaceName, ProcessId, Runtime, Signalizable,
     State, UserId,
@@ -104,6 +104,7 @@ impl Starting for NexusBootstrap {
                 user_id: UserId(0),
                 process_id: ProcessId(1),
             },
+            instance_id: InstanceId("instance".into()),
         }
     }
 

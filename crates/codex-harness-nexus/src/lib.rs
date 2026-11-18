@@ -1,14 +1,14 @@
 //! The Codex Harness Nexus: what it remembers of each Codex session, how an
 //! operation is attempted through its translator's emissions, folded,
-//! committed whole and published; the name its sockets take, and the
-//! bootstrap the pair launcher starts it with.
+//! committed whole and published, and how a failed emission lane is told
+//! apart from every answer the translator gives; and the name its sockets
+//! take.
 
 extern crate self as folding;
 extern crate self as memory;
 extern crate self as operation;
 
 mod generated {
-    pub mod bootstrap;
     pub mod emission;
     pub mod folding;
     pub mod memory;
@@ -16,6 +16,7 @@ mod generated {
     pub mod runtime;
 }
 mod diagnosing;
+mod failing;
 mod folded;
 mod naming;
 mod nexus;
@@ -24,7 +25,7 @@ mod views;
 mod watching;
 
 pub use diagnosing::Diagnosing;
-pub use generated::bootstrap::*;
+pub use failing::LaneReporting;
 pub use generated::emission;
 pub use generated::folding::*;
 pub use generated::memory::*;

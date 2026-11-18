@@ -1,8 +1,6 @@
 use codex_harness_translator::CodexHarness;
-use translator_client::{AnswerPrinting, Invoking, TextInvocation, TextLane};
+use translator_client::{TextCommand, TextInvocation, TextLane};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    TextInvocation::from_arguments::<CodexHarness>(TextLane::MetaText, std::env::args().skip(1))?
-        .print_answers()?;
-    Ok(())
+fn main() -> std::process::ExitCode {
+    TextInvocation::run::<CodexHarness>(TextLane::MetaText, std::env::args().skip(1))
 }

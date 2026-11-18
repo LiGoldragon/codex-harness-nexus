@@ -79,17 +79,17 @@
             fmt = pkgs.runCommand "codex-harness-nexus-fmt" { nativeBuildInputs = [ toolchain ]; } ''
               cd ${./crates}
               rustfmt --edition 2024 --check \
-                codex-harness-nexus/src/{lib,diagnosing,folded,naming,nexus,store,views,watching}.rs \
+                codex-harness-nexus/src/{lib,diagnosing,failing,folded,naming,nexus,store,views,watching}.rs \
                 codex-harness-translator/src/{lib,emitting,rollout,translating}.rs \
                 codex-harness-translator/src/bin/{codex-harness,codex-harness-meta,codex-harness-translator,codex-harness-pair}.rs \
                 codex-harness-nexus-daemon/src/{lib,bootstrap,emitting,main,serving,waking}.rs \
-                codex-harness-nexus-daemon/tests/bootstrap_order.rs
+                codex-harness-nexus-daemon/tests/{bootstrap_order,lane_failure}.rs
               touch "$out"
             '';
             generated = pkgs.runCommand "codex-harness-nexus-generated" {
               nativeBuildInputs = [ ethos.packages.${pkgs.stdenv.hostPlatform.system}.ethos-zero ];
             } ''
-              for file in bootstrap emission folding memory operation runtime; do
+              for file in emission folding memory operation runtime; do
                 ethos-zero "Generate.{ ${./crates/codex-harness-nexus/ethos}/$file.ethos $PWD/generated }"
                 diff -u ${./crates/codex-harness-nexus/src/generated}/$file.rs generated/$file.rs
               done

@@ -141,6 +141,7 @@ dependencies = [
  "protos",
  "rkyv",
  "serde_json",
+ "signal",
  "signal-codex-harness-nexus",
  "translator",
  "translator-client",
@@ -512,8 +513,8 @@ dependencies = [
 
 [[package]]
 name = "nexus-exchange"
-version = "0.1.1"
-source = "git+https://github.com/LiGoldragon/nexus?rev=63a2d477ca194913c847d15f227637d84fbe9aeb#63a2d477ca194913c847d15f227637d84fbe9aeb"
+version = "0.2.0"
+source = "git+https://github.com/LiGoldragon/nexus?rev=fb3441f952ecba19dd3e9f288a39e7275f8ae700#fb3441f952ecba19dd3e9f288a39e7275f8ae700"
 dependencies = [
  "datom-codec",
  "protos",
@@ -524,8 +525,8 @@ dependencies = [
 
 [[package]]
 name = "nexus-querying"
-version = "0.1.1"
-source = "git+https://github.com/LiGoldragon/nexus?rev=63a2d477ca194913c847d15f227637d84fbe9aeb#63a2d477ca194913c847d15f227637d84fbe9aeb"
+version = "0.2.0"
+source = "git+https://github.com/LiGoldragon/nexus?rev=fb3441f952ecba19dd3e9f288a39e7275f8ae700#fb3441f952ecba19dd3e9f288a39e7275f8ae700"
 dependencies = [
  "nexus-exchange",
  "rkyv",
@@ -534,8 +535,8 @@ dependencies = [
 
 [[package]]
 name = "nexus-serving"
-version = "0.1.1"
-source = "git+https://github.com/LiGoldragon/nexus?rev=63a2d477ca194913c847d15f227637d84fbe9aeb#63a2d477ca194913c847d15f227637d84fbe9aeb"
+version = "0.2.0"
+source = "git+https://github.com/LiGoldragon/nexus?rev=fb3441f952ecba19dd3e9f288a39e7275f8ae700#fb3441f952ecba19dd3e9f288a39e7275f8ae700"
 dependencies = [
  "futures-channel",
  "futures-util",
@@ -975,10 +976,12 @@ dependencies = [
 
 [[package]]
 name = "translator-client"
-version = "0.1.1"
-source = "git+https://github.com/LiGoldragon/translator?rev=8e744a4503f13dd748e7e222f5f7aa5443b28961#8e744a4503f13dd748e7e222f5f7aa5443b28961"
+version = "0.2.0"
+source = "git+https://github.com/LiGoldragon/translator?rev=0b44de796a984e02d2ee96bdd4729bf8acd2a79b#0b44de796a984e02d2ee96bdd4729bf8acd2a79b"
 dependencies = [
+ "datom-codec",
  "nexus-exchange",
+ "protos",
  "rkyv",
  "signal",
  "translator",
@@ -986,8 +989,8 @@ dependencies = [
 
 [[package]]
 name = "translator-serving"
-version = "0.1.1"
-source = "git+https://github.com/LiGoldragon/translator?rev=8e744a4503f13dd748e7e222f5f7aa5443b28961#8e744a4503f13dd748e7e222f5f7aa5443b28961"
+version = "0.2.0"
+source = "git+https://github.com/LiGoldragon/translator?rev=0b44de796a984e02d2ee96bdd4729bf8acd2a79b#0b44de796a984e02d2ee96bdd4729bf8acd2a79b"
 dependencies = [
  "datom-codec",
  "nexus-exchange",
@@ -996,6 +999,7 @@ dependencies = [
  "nix",
  "protos",
  "rkyv",
+ "rustix",
  "signal",
  "translator",
 ]

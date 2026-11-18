@@ -9,11 +9,11 @@ signal = { git = "https://github.com/LiGoldragon/signal", rev = "4f5cbb9", defau
 signal-codex-harness-nexus = { git = "https://github.com/LiGoldragon/signal-codex-harness-nexus", rev = "6a6fd1c53a2186689ee31e849203e7dd67f76c99", default-features = false }
 meta-signal-codex-harness-nexus = { git = "https://github.com/LiGoldragon/meta-signal-codex-harness-nexus", rev = "b6039b70491a2b4b778af4b094c3b5782da2964e", default-features = false }
 nexus = { git = "https://github.com/LiGoldragon/nexus", rev = "d020a62", default-features = false }
-nexus-exchange = { git = "https://github.com/LiGoldragon/nexus", rev = "63a2d477ca194913c847d15f227637d84fbe9aeb", default-features = false }
-nexus-serving = { git = "https://github.com/LiGoldragon/nexus", rev = "63a2d477ca194913c847d15f227637d84fbe9aeb", default-features = false }
+nexus-exchange = { git = "https://github.com/LiGoldragon/nexus", rev = "fb3441f952ecba19dd3e9f288a39e7275f8ae700", default-features = false }
+nexus-serving = { git = "https://github.com/LiGoldragon/nexus", rev = "fb3441f952ecba19dd3e9f288a39e7275f8ae700", default-features = false }
 shared-translator = { package = "translator", git = "https://github.com/LiGoldragon/translator", rev = "29601a3", default-features = false, features = ["unix"] }
-translator-client = { git = "https://github.com/LiGoldragon/translator", rev = "8e744a4503f13dd748e7e222f5f7aa5443b28961", default-features = false }
-translator-serving = { git = "https://github.com/LiGoldragon/translator", rev = "8e744a4503f13dd748e7e222f5f7aa5443b28961", default-features = false }
+translator-client = { git = "https://github.com/LiGoldragon/translator", rev = "0b44de796a984e02d2ee96bdd4729bf8acd2a79b", default-features = false }
+translator-serving = { git = "https://github.com/LiGoldragon/translator", rev = "0b44de796a984e02d2ee96bdd4729bf8acd2a79b", default-features = false }
 memory-engine = { git = "https://github.com/LiGoldragon/memory-engine", rev = "3261088" }
 rkyv = { version = "0.8", default-features = false, features = ["std", "bytecheck", "little_endian", "pointer_width_32", "unaligned"] }
 datom-codec = { git = "https://github.com/LiGoldragon/datom-codec", rev = "09a0526" }

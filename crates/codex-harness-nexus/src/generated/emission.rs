@@ -35,6 +35,7 @@ pub enum Emission {
 pub enum RolloutFinding_Data {
     Found(harness::FilePath),
     Unfound,
+    LaneFailed(nexus_exchange::LaneFailure),
 }
 #[rustfmt::skip]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
@@ -42,6 +43,7 @@ pub enum RolloutFinding_Data {
 pub enum IdentityClaim_Data {
     Claimed(flow::FlowId),
     Unclaimed(signal_codex_harness_nexus::IdentityFailure),
+    LaneFailed(nexus_exchange::LaneFailure),
 }
 #[rustfmt::skip]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
@@ -56,6 +58,7 @@ pub struct RolloutReading_Data_Read_Data {
 pub enum RolloutReading_Data {
     Read(RolloutReading_Data_Read_Data),
     Unreadable(signal_codex_harness_nexus::Diagnostic),
+    LaneFailed(nexus_exchange::LaneFailure),
 }
 #[rustfmt::skip]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
@@ -63,6 +66,7 @@ pub enum RolloutReading_Data {
 pub enum RolloutIdentity_Data {
     Identified(harness::Session),
     Unidentified,
+    LaneFailed(nexus_exchange::LaneFailure),
 }
 #[rustfmt::skip]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
@@ -72,6 +76,7 @@ pub enum Outcome {
     IdentityClaim(IdentityClaim_Data),
     RolloutReading(RolloutReading_Data),
     RolloutIdentity(RolloutIdentity_Data),
+    LaneFailed(nexus_exchange::LaneFailure),
 }
 #[rustfmt::skip]
 pub trait Emitted {

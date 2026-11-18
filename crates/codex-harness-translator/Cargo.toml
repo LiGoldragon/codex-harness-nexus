@@ -8,12 +8,12 @@ repository = "https://github.com/LiGoldragon/codex-harness-nexus"
 publish = false
 
 # Reading and writing text is the translator's: `text` turns on the shared
-# serving's lanes, the pair launcher and the CLIs, which are built only with
-# it.
+# serving's lanes, the pair launcher and the CLIs, which read their place
+# from their configuration and are built only with it.
 [features]
 default = []
 datom = ["dep:datom-codec", "dep:protos", "codex-harness-nexus/datom", "harness/datom", "flow/datom", "signal-codex-harness-nexus/datom"]
-text = ["datom", "meta-signal-codex-harness-nexus/datom", "shared-translator/text", "translator-serving/text"]
+text = ["datom", "meta-signal-codex-harness-nexus/datom", "shared-translator/text", "translator-client/datom", "translator-serving/text"]
 
 [dependencies]
 codex-harness-nexus = { path = "../codex-harness-nexus" }
@@ -22,6 +22,7 @@ flow.workspace = true
 signal-codex-harness-nexus.workspace = true
 meta-signal-codex-harness-nexus.workspace = true
 shared-translator.workspace = true
+signal.workspace = true
 translator-client.workspace = true
 translator-serving.workspace = true
 rkyv.workspace = true

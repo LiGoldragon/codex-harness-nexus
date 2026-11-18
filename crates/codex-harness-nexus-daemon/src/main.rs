@@ -1,9 +1,12 @@
-use codex_harness_nexus_daemon::{BootstrapReading, Daemon, DaemonStarting, NexusBootstrap};
+use codex_harness_nexus_daemon::{Daemon, DaemonStarting, StandardInputReading};
 use nexus_exchange::ValidAdmission;
+use nexus_serving::NexusBootstrap;
 use shared_translator::placement::{Preparable, validate_place_name};
 
-/// The bootstrap is checked before anything is made: its admission, then its
-/// place's name; only then is the place prepared and the meta socket bound.
+/// The shared Nexus bootstrap is checked before anything is made: its
+/// admission, then its place's name; only then is the place prepared and the
+/// meta socket bound. Its instance identifier names a run, which this Nexus
+/// labels nothing with.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bootstrap = NexusBootstrap::read_standard_input()?;
     let admission = ValidAdmission::try_from(&bootstrap.admission)

@@ -1,19 +1,18 @@
-//! The frame the Nexus is started with.
+//! The frame the Nexus is started with: the shared Nexus bootstrap, which
+//! the pair launcher writes on standard input.
 
-use codex_harness_nexus::NexusBootstrap;
-use signal::{FrameCapacity, FrameReading, Restorable, Signal};
+use nexus_serving::{BootstrapReading as _, NexusBootstrap};
 
-pub trait BootstrapReading: Sized {
-    /// Reads the one bootstrap frame the pair launcher writes on standard
-    /// input, within Signal's largest frame, then closes standard input.
+pub trait StandardInputReading: Sized {
+    /// Reads the one bootstrap frame from standard input, within Signal's
+    /// largest frame, then closes standard input.
     fn read_standard_input() -> Result<Self, Box<dyn std::error::Error>>;
 }
 
-impl BootstrapReading for NexusBootstrap {
+impl StandardInputReading for NexusBootstrap {
     fn read_standard_input() -> Result<Self, Box<dyn std::error::Error>> {
         let mut input = std::io::stdin().lock();
-        let body = input.read_frame(FrameCapacity::from(signal::MAXIMUM_SIGNAL_BYTES))?;
-        let bootstrap = Signal::<Self>::from(Vec::<u8>::from(body)).restore()?;
+        let bootstrap = Self::read_bootstrap(&mut input)?;
         drop(input);
         nix::unistd::close(0)?;
         Ok(bootstrap)
