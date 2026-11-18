@@ -57,15 +57,14 @@ impl Folding for EventBatch {
                 if watch.byte_offset.0 < 0 {
                     return Err(FoldRefusal::InvalidOffset(watch.byte_offset));
                 }
-                if let Rollout::Watched(previous) = &record.rollout {
-                    if previous.file_path == watch.file_path
-                        && watch.byte_offset.0 < previous.byte_offset.0
-                    {
-                        return Err(FoldRefusal::OffsetReversed(OffsetReversed_Data {
-                            first_byte_offset: previous.byte_offset,
-                            second_byte_offset: watch.byte_offset,
-                        }));
-                    }
+                if let Rollout::Watched(previous) = &record.rollout
+                    && previous.file_path == watch.file_path
+                    && watch.byte_offset.0 < previous.byte_offset.0
+                {
+                    return Err(FoldRefusal::OffsetReversed(OffsetReversed_Data {
+                        first_byte_offset: previous.byte_offset,
+                        second_byte_offset: watch.byte_offset,
+                    }));
                 }
             }
             record.rollout = rollout.clone();
