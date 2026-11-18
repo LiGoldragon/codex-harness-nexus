@@ -99,16 +99,6 @@ pub trait DaemonStarting: Sized {
     fn serve(self, runtime: tokio::runtime::Handle) -> Result<(), Box<dyn std::error::Error>>;
 }
 
-impl std::fmt::Display for ListenerFailure {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Meta(message) | Self::Public(message) => formatter.write_str(message),
-        }
-    }
-}
-
-impl std::error::Error for ListenerFailure {}
-
 impl DaemonStarting for Daemon {
     fn bind(
         place: &Place,

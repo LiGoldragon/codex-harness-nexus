@@ -9,7 +9,7 @@ use codex_harness_nexus::emission::{
     ClaimIdentity_Data, Emission, Emittable, IdentityClaim_Data, Outcome, RolloutFinding_Data,
     RolloutIdentity_Data, RolloutReading_Data,
 };
-use harness::{FilePath, Session};
+use harness::{FilePath, SessionId};
 use nexus_exchange::ValidAdmission;
 use nexus_serving::{EmissionLane, Emitting as _, LaneFailing, LaneFailure, LaneFault};
 
@@ -94,7 +94,7 @@ impl Carrying for PairedTranslator {
 
 /// Each emission's outcome is the translator's answer as it came, or the
 /// lane's failure, which the Nexus tells apart from every answer.
-impl Emittable<PairedTranslator> for Session {
+impl Emittable<PairedTranslator> for SessionId {
     fn emit(&self, translator: &PairedTranslator) -> RolloutFinding_Data {
         translator.carry(Emission::FindRollout(self.clone()))
     }
