@@ -2,7 +2,8 @@
 //! gives: each emission's outcome, and the outcome the lane carries, has
 //! one variant of its own for it. The operation that sent the emission is
 //! refused as `ReportFailure::LaneFailed` when its effect needs the lane,
-//! and is recorded, answered `Output::ReportedLaneFailed`, when it does not.
+//! and recorded as a `ReportFault::LaneFailed` inside
+//! `Output::ReportedWithFaults` when the report can commit without it.
 //!
 //! Hand-written: Ethos names the trait, and an association's body is not
 //! something it can generate.

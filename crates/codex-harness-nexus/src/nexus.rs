@@ -346,31 +346,36 @@ where
             let changes = self.store.commit(plan).map_err(ReportFailure::Unrecorded)?;
             self.publish(changes.clone());
             if !rollout_watch_preplaced {
-                let configuration = self
-                    .store
-                    .configuration()
-                    .map_err(ReportFailure::Unrecorded)?;
-                let records = self.store.recall_all().map_err(ReportFailure::Unrecorded)?;
-                let watch_plan = self
-                    .sessions_watch
-                    .planned(configuration.sessions_directories_option, records);
-                for failure in self.sessions_watch.retarget(watch_plan) {
-                    if failure.watch_target_option == Some(WatchTarget::RolloutFile) {
-                        let file_path = failure
-                            .file_path_option
-                            .expect("rollout placement failures carry their target path");
-                        report_fault_vector.push(ReportFault::Unwatched(RolloutWatchFailure {
-                            file_path,
-                            diagnostic: failure.diagnostic,
-                        }));
-                    } else {
-                        eprintln!(
-                            "Codex Harness Nexus watch {:?} at {:?}: {}",
-                            failure.watch_target_option,
-                            failure.file_path_option,
-                            failure.diagnostic.0
-                        );
-                    }
+                match self.store.configuration() {
+                    Ok(configuration) => match self.store.recall_all() {
+                        Ok(records) => {
+                            let watch_plan = self
+                                .sessions_watch
+                                .planned(configuration.sessions_directories_option, records);
+                            for failure in self.sessions_watch.retarget(watch_plan) {
+                                if failure.watch_target_option == Some(WatchTarget::RolloutFile) {
+                                    let file_path = failure.file_path_option.expect(
+                                        "rollout placement failures carry their target path",
+                                    );
+                                    report_fault_vector.push(ReportFault::Unwatched(
+                                        RolloutWatchFailure {
+                                            file_path,
+                                            diagnostic: failure.diagnostic,
+                                        },
+                                    ));
+                                } else {
+                                    eprintln!(
+                                        "Codex Harness Nexus watch {:?} at {:?}: {}",
+                                        failure.watch_target_option,
+                                        failure.file_path_option,
+                                        failure.diagnostic.0
+                                    );
+                                }
+                            }
+                        }
+                        Err(failure) => report_fault_vector.push(ReportFault::MemoryFault(failure)),
+                    },
+                    Err(failure) => report_fault_vector.push(ReportFault::MemoryFault(failure)),
                 }
             }
             (
@@ -400,6 +405,12 @@ where
                     Err(ReportFailure::Unreadable(failure)) => performed
                         .report_fault_vector
                         .push(ReportFault::Unread(failure)),
+                    Err(ReportFailure::Unrecorded(failure)) => performed
+                        .report_fault_vector
+                        .push(ReportFault::MemoryFault(failure)),
+                    Err(ReportFailure::FoldRefused(failure)) => performed
+                        .report_fault_vector
+                        .push(ReportFault::FoldRefusal(failure)),
                     Err(failure) => return Err(failure),
                 }
             }
@@ -417,6 +428,12 @@ where
                 Err(ReportFailure::Unreadable(failure)) => performed
                     .report_fault_vector
                     .push(ReportFault::Unread(failure)),
+                Err(ReportFailure::Unrecorded(failure)) => performed
+                    .report_fault_vector
+                    .push(ReportFault::MemoryFault(failure)),
+                Err(ReportFailure::FoldRefused(failure)) => performed
+                    .report_fault_vector
+                    .push(ReportFault::FoldRefusal(failure)),
                 Err(failure) => return Err(failure),
             }
         }
