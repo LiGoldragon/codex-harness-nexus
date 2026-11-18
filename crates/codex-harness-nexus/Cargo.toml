@@ -22,6 +22,8 @@ memory-engine.workspace = true
 rkyv.workspace = true
 tokio.workspace = true
 futures-util.workspace = true
+futures-channel.workspace = true
+mio.workspace = true
 datom-codec = { workspace = true, optional = true }
 protos = { workspace = true, optional = true }
 
