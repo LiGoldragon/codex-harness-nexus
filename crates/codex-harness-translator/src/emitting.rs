@@ -13,7 +13,7 @@ use codex_harness_nexus::emission::{
 };
 use codex_harness_nexus::{Diagnosing as _, Watch};
 use flow::FlowId;
-use harness::{FilePath, Observable, Session};
+use harness::{FilePath, Observable, SessionId};
 use signal_codex_harness_nexus::{
     ByteOffset, Diagnostic, IdentityFailure, Observation, Observation_Malformed_Data, ParseFailure,
     ProducerOutput, Refused_Data,
@@ -27,7 +27,7 @@ use crate::translating::CodexHarnessTranslator;
 
 /// Codex's own thread database is not read yet: a session whose hook names
 /// no path waits for its rollout to appear in a sessions directory.
-impl Emittable<CodexHarnessTranslator> for Session {
+impl Emittable<CodexHarnessTranslator> for SessionId {
     fn emit(&self, _translator: &CodexHarnessTranslator) -> RolloutFinding_Data {
         RolloutFinding_Data::Unfound
     }
@@ -39,7 +39,7 @@ impl Emittable<CodexHarnessTranslator> for ClaimIdentity_Data {
             .arg("codex")
             .arg("--flows-root")
             .arg(&self.flows_root.0)
-            .env("CODEX_SESSION_ID", &self.session.0)
+            .env("CODEX_SESSION_ID", &self.session_id.0)
             .output()
         {
             Ok(output) => output,
@@ -229,7 +229,7 @@ impl Emittable<CodexHarnessTranslator> for FilePath {
             .pointer("/payload/id")
             .and_then(serde_json::Value::as_str)
             .map_or(RolloutIdentity_Data::Unidentified, |id| {
-                RolloutIdentity_Data::Identified(Session(id.to_owned()))
+                RolloutIdentity_Data::Identified(SessionId(id.to_owned()))
             })
     }
 }

@@ -1,5 +1,5 @@
-//! The translator's Kameo-backed settings owner, prepared independently of
-//! the synchronous production translator adapter.
+//! The translator's Kameo-backed settings owner used by the synchronous
+//! production translator adapter.
 //!
 //! `TranslatorSettingsActor` owns both its actor and the Tokio runtime that
 //! runs it. Bootstrap and destruction are synchronous OS-thread operations;
@@ -44,7 +44,7 @@ impl Drop for SettingsActorRuntime {
     }
 }
 
-/// A standalone actor owner, not yet wired into `CodexHarnessTranslator`.
+/// The actor-backed settings owner used by `CodexHarnessTranslator`.
 pub struct TranslatorSettingsActor {
     settings: SettingsActorRuntime,
 }

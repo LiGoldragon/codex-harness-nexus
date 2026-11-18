@@ -3,8 +3,6 @@
 //! text budget it carries into every configuration the Nexus reads out, and
 //! its answer to each emission.
 
-use std::sync::{PoisonError, RwLock};
-
 use codex_harness_nexus::CodexHarness;
 use codex_harness_nexus::emission::{Emission, Emittable as _, Outcome};
 use meta_signal_codex_harness_nexus as meta;
@@ -12,11 +10,14 @@ use shared_translator::Caller;
 use signal::Frame;
 use signal_codex_harness_nexus::{Input, Output};
 use translator_serving::{
-    DepthLimit, EmissionAnswering, MetaTranslating, NexusFailure, NodeLimit, PublicTranslating,
-    Settling, TextBudgeting, TextLimits, Translator, TranslatorBootstrap, ValidTextBudget,
+    EmissionAnswering, MetaTranslating, NexusFailure, PublicTranslating, Settling, TextBudgeting,
+    Translator, TranslatorBootstrap, ValidTextBudget,
 };
 
-use crate::settings_actor::{TextLimitsValidating, TranslatorBootstrapFailure};
+use crate::settings_actor::{
+    BudgetMerging, Limiting, MetaBudgeting, SettingsReading, SettingsWriting, TextLimitsValidating,
+    TranslatorBootstrapFailure, TranslatorSettingsActor,
+};
 
 /// The translator's settings: the budget every ordinary request's text is
 /// read within, the translator's own setting on the meta socket.
@@ -35,7 +36,7 @@ impl TextBudgeting for TranslatorSettings {
 /// Nexus, and carries every emission of the Nexus into the world. Its
 /// settings change when the meta socket sets one.
 pub struct CodexHarnessTranslator {
-    pub settings: RwLock<TranslatorSettings>,
+    pub settings: TranslatorSettingsActor,
 }
 
 /// The translator a bootstrap starts: ready at once, its text budget starting
@@ -45,87 +46,11 @@ impl TryFrom<&TranslatorBootstrap> for CodexHarnessTranslator {
     type Error = TranslatorBootstrapFailure;
 
     fn try_from(bootstrap: &TranslatorBootstrap) -> Result<Self, Self::Error> {
-        let text_budget = bootstrap.text_limits.valid_budget()?;
         Ok(Self {
-            settings: RwLock::new(TranslatorSettings { text_budget }),
+            settings: <TranslatorSettingsActor as TryFrom<&TranslatorBootstrap>>::try_from(
+                bootstrap,
+            )?,
         })
-    }
-}
-
-/// The limits a meta text budget names, as the shared serving validates
-/// them.
-pub trait Limiting {
-    fn text_limits(&self) -> TextLimits;
-}
-
-impl Limiting for meta::TextBudget {
-    fn text_limits(&self) -> TextLimits {
-        TextLimits {
-            node_limit: NodeLimit(self.node_limit.0),
-            depth_limit: DepthLimit(self.depth_limit.0),
-        }
-    }
-}
-
-/// A budget the shared serving validated, as the meta contract names it.
-pub trait MetaBudgeting {
-    fn meta_budget(&self) -> meta::TextBudget;
-}
-
-impl MetaBudgeting for ValidTextBudget {
-    fn meta_budget(&self) -> meta::TextBudget {
-        meta::TextBudget {
-            node_limit: meta::NodeLimit(
-                i64::try_from(self.nodes).expect("a valid node limit fits i64"),
-            ),
-            depth_limit: meta::DepthLimit(
-                i64::try_from(self.depth).expect("a valid depth limit fits i64"),
-            ),
-        }
-    }
-}
-
-/// A configuration the Nexus read out, with the translator's own setting
-/// as it stands: the Nexus holds no text budget, so the readout it sends
-/// has none until the translator writes its own in.
-pub trait BudgetMerging {
-    fn with_text_budget(self, text_budget: meta::TextBudget) -> Self;
-}
-
-impl BudgetMerging for meta::ConfigurationReadout {
-    fn with_text_budget(self, text_budget: meta::TextBudget) -> Self {
-        Self {
-            configuration: meta::Configuration {
-                text_budget_option: Some(text_budget),
-                ..self.configuration
-            },
-            awaited_directories: self.awaited_directories,
-        }
-    }
-}
-
-/// The translator's own setting, set on the meta socket.
-pub trait TextBudgetSetting {
-    /// Sets the budget every later ordinary request is read within, or
-    /// refuses a budget out of Signal's bounds.
-    fn set_text_budget(&self, budget: meta::TextBudget) -> meta::Output;
-}
-
-impl TextBudgetSetting for CodexHarnessTranslator {
-    fn set_text_budget(&self, budget: meta::TextBudget) -> meta::Output {
-        match ValidTextBudget::try_from(&budget.text_limits()) {
-            Ok(text_budget) => {
-                let mut settings = self
-                    .settings
-                    .write()
-                    .unwrap_or_else(PoisonError::into_inner);
-                settings.text_budget = text_budget;
-                meta::Output::Configured(meta::Set::TextBudget(budget))
-            }
-            Err(_) => meta::Output::ConfigureRefused(
-                meta::ConfigurationRefusal::InvalidTextBudget(budget),
-            ),
-        }
     }
 }
 
@@ -134,18 +59,12 @@ impl Translator for CodexHarnessTranslator {
     type Ready = TranslatorSettings;
 
     fn ready(&self) -> Option<TranslatorSettings> {
-        Some(self.current_settings())
-    }
-}
-
-/// The translator's settings as they stand.
-pub trait SettingsReading {
-    fn current_settings(&self) -> TranslatorSettings;
-}
-
-impl SettingsReading for CodexHarnessTranslator {
-    fn current_settings(&self) -> TranslatorSettings {
-        *self.settings.read().unwrap_or_else(PoisonError::into_inner)
+        // The serving contract has only Option for readiness, so actor
+        // unavailability remains not-ready here rather than a success or a
+        // fabricated text budget.
+        let settings = self.settings.current_settings().ok()?;
+        let text_budget = settings.text_limits.valid_budget().ok()?;
+        Some(TranslatorSettings { text_budget })
     }
 }
 
@@ -182,7 +101,16 @@ impl MetaTranslating for CodexHarnessTranslator {
     fn settle(&self, input: meta::Input) -> Settling<meta::Output, meta::Input> {
         match input {
             meta::Input::Configure(setting) => match setting {
-                meta::Set::TextBudget(budget) => Settling::Answered(self.set_text_budget(budget)),
+                meta::Set::TextBudget(budget) => {
+                    Settling::Answered(match self.settings.request_text_budget(budget.clone()) {
+                        Ok(output) => output,
+                        Err(failure) => meta::Output::ConfigureRefused(
+                            meta::ConfigurationRefusal::TranslatorUnavailable(meta::Diagnostic(
+                                failure.to_string(),
+                            )),
+                        ),
+                    })
+                }
                 nexus_setting @ (meta::Set::FlowsRoot(_)
                 | meta::Set::IdentityProducer(_)
                 | meta::Set::SessionsDirectories(_)
@@ -200,14 +128,30 @@ impl MetaTranslating for CodexHarnessTranslator {
     }
 
     fn meta_answered(&self, response: meta::Output) -> Result<meta::Output, NexusFailure> {
-        let text_budget = self.current_settings().text_budget.meta_budget();
+        let settings = match self.settings.current_settings() {
+            Ok(settings) => settings,
+            Err(failure) => {
+                return Ok(meta::Output::ConfigureRefused(
+                    meta::ConfigurationRefusal::TranslatorUnavailable(meta::Diagnostic(
+                        failure.to_string(),
+                    )),
+                ));
+            }
+        };
+        let valid_budget = settings
+            .text_limits
+            .valid_budget()
+            .map_err(|failure| NexusFailure(failure.to_string()))?;
+        let text_budget = valid_budget
+            .meta_budget()
+            .map_err(|failure| NexusFailure(failure.to_string()))?;
         Ok(match response {
-            meta::Output::Subscribed(Frame::Opened(readout)) => {
-                meta::Output::Subscribed(Frame::Opened(readout.with_text_budget(text_budget)))
-            }
-            meta::Output::Subscribed(Frame::Lagged(readout)) => {
-                meta::Output::Subscribed(Frame::Lagged(readout.with_text_budget(text_budget)))
-            }
+            meta::Output::Subscribed(Frame::Opened(readout)) => meta::Output::Subscribed(
+                Frame::Opened(BudgetMerging::with_text_budget(readout, text_budget)),
+            ),
+            meta::Output::Subscribed(Frame::Lagged(readout)) => meta::Output::Subscribed(
+                Frame::Lagged(BudgetMerging::with_text_budget(readout, text_budget)),
+            ),
             response @ (meta::Output::Configured(_)
             | meta::Output::ConfigureRefused(_)
             | meta::Output::Subscribed(Frame::Changed(_))) => response,
