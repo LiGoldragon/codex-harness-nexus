@@ -30,6 +30,7 @@ pub struct WatchEvent {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub struct WatchFailure {
+    pub watch_target_option: std::option::Option<WatchTarget>,
     pub file_path_option: std::option::Option<harness::FilePath>,
     pub diagnostic: signal_codex_harness_nexus::Diagnostic,
 }
@@ -57,8 +58,29 @@ pub enum Reach {
 #[rustfmt::skip]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub enum WatchTarget {
+    SessionsDirectory,
+    RolloutFile,
+}
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct WatchPlacement {
+    pub file_path: harness::FilePath,
+    pub watch_target: WatchTarget,
+}
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct WatchPlan {
+    pub watch_placement_vector: std::vec::Vec<WatchPlacement>,
+}
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub struct Placement {
     pub file_path: harness::FilePath,
+    pub watch_target: WatchTarget,
     pub file_path_option: std::option::Option<harness::FilePath>,
 }
 #[rustfmt::skip]
@@ -157,7 +179,7 @@ pub trait SessionsDirectoriesSetting {
 }
 #[rustfmt::skip]
 pub trait PlacementPositioning {
-    fn placed(&self) -> Placement;
+    fn placed(&self, input: WatchPlacement) -> Placement;
 }
 #[rustfmt::skip]
 pub trait PlacementState {
@@ -170,18 +192,16 @@ pub trait ReachCoverage {
 }
 #[rustfmt::skip]
 pub trait Settling {
-    fn settle(
-        &mut self,
-    ) -> std::vec::Vec<meta_signal_codex_harness_nexus::UnwatchableDirectory>;
+    fn settle(&mut self) -> std::vec::Vec<WatchFailure>;
     fn forget(&mut self, input: WatchEvent);
     fn written(&self, input: WatchEvent) -> std::vec::Vec<harness::FilePath>;
     fn awaited(&self) -> meta_signal_codex_harness_nexus::AwaitedDirectories;
 }
 #[rustfmt::skip]
 pub trait SessionsWatching {
-    fn opened<N: SessionsDirectoriesSetting>(
+    fn opened(
         &mut self,
-        input: N,
+        input: WatchPlan,
     ) -> std::result::Result<
         std::option::Option<codex_harness_nexus::DirectoryWatch>,
         meta_signal_codex_harness_nexus::UnwatchableDirectory,
@@ -190,7 +210,19 @@ pub trait SessionsWatching {
         &mut self,
         input: std::option::Option<codex_harness_nexus::DirectoryWatch>,
     );
+    fn retarget(&mut self, input: WatchPlan) -> std::vec::Vec<WatchFailure>;
     fn awaited(&self) -> meta_signal_codex_harness_nexus::AwaitedDirectories;
+    fn unwatchable(&self) -> meta_signal_codex_harness_nexus::UnwatchableDirectories;
+}
+#[rustfmt::skip]
+pub trait WatchPlanBuilding {
+    fn planned(
+        &self,
+        input_0: std::option::Option<
+            meta_signal_codex_harness_nexus::SessionsDirectories,
+        >,
+        input_1: std::vec::Vec<codex_harness_nexus::SessionRecord>,
+    ) -> WatchPlan;
 }
 #[rustfmt::skip]
 pub trait PublicOpening {
@@ -289,12 +321,9 @@ pub trait NexusRuntime {
     fn watch_sessions<N: SessionsDirectoriesSetting>(
         &mut self,
         input: N,
-    ) -> std::result::Result<
-        Opened,
-        meta_signal_codex_harness_nexus::UnwatchableDirectory,
-    >;
+    ) -> std::result::Result<Opened, NexusControlFailure>;
     fn follow_watch(&mut self, input: WatchWord) -> std::vec::Vec<WatchConsequence>;
-    fn open_public(&mut self) -> std::result::Result<Opened, ListenerFailure>;
+    fn open_public(&mut self) -> std::result::Result<Opened, NexusControlFailure>;
     fn initialize(&mut self) -> std::result::Result<Opened, NexusControlFailure>;
     fn perform<N: runtime::Operable>(
         &mut self,
@@ -331,8 +360,8 @@ pub trait NexusRuntime {
 }
 #[rustfmt::skip]
 const _: () = {
-    fn assert_filepath_placementpositioning<T: PlacementPositioning>() {}
-    let _ = assert_filepath_placementpositioning::<harness::FilePath>;
+    fn assert_watchplacement_placementpositioning<T: PlacementPositioning>() {}
+    let _ = assert_watchplacement_placementpositioning::<WatchPlacement>;
 };
 #[rustfmt::skip]
 const _: () = {
@@ -372,4 +401,6 @@ const _: () = {
 const _: () = {
     fn assert_sessionswatch_sessionswatching<T: SessionsWatching>() {}
     let _ = assert_sessionswatch_sessionswatching::<codex_harness_nexus::SessionsWatch>;
+    fn assert_sessionswatch_watchplanbuilding<T: WatchPlanBuilding>() {}
+    let _ = assert_sessionswatch_watchplanbuilding::<codex_harness_nexus::SessionsWatch>;
 };

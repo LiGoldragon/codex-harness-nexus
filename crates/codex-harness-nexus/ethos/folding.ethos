@@ -1,17 +1,11 @@
 Library
 [ operation:EventBatch
   memory:[ SessionRecord MalformedRecord Rollout ]
-  harness:Session
+  harness:SessionId
   flow:FlowId
-  signal_codex_harness_nexus:[ Changed ByteOffset ] ]
+  signal_codex_harness_nexus:[ Changed ByteOffset FoldRefusal ] ]
 [ SessionChange.[ Registered.SessionRecord Updated.SessionRecord ]
   FoldPlan.{ SessionChange Vector<MalformedRecord> Vector<Changed> }
-  FoldRefusal.[ Unregistered.Session
-                SessionMismatch.{ Session Session }
-                IdentityMismatch.{ FlowId FlowId }
-                WatchIdentityMismatch.{ FlowId FlowId }
-                InvalidOffset.ByteOffset
-                OffsetReversed.{ ByteOffset ByteOffset }
-                StaleReading.{ ByteOffset Option<ByteOffset> } ] ]
+  ]
 [ Folding.[ fold.{ [ Option<SessionRecord> ] [ Result<FoldPlan FoldRefusal> ] } ] ]
 [ EventBatch.[ Folding ] ]

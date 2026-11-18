@@ -8,7 +8,7 @@
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub struct EventBatch {
-    pub session: harness::Session,
+    pub session_id: harness::SessionId,
     pub flow_id: flow::FlowId,
     pub observation_vector: std::vec::Vec<signal_codex_harness_nexus::Observation>,
     pub rollout_option: std::option::Option<memory::Rollout>,

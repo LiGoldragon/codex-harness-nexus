@@ -1,10 +1,11 @@
 use harness::{Event, Flow, Observed, State, Tokens, Transitionable};
-use signal_codex_harness_nexus::{Changed, Changed_Malformed_Data, Observation, Transition_Data};
-
-use crate::generated::folding::{
-    FoldPlan, FoldRefusal, Folding, IdentityMismatch_Data, OffsetReversed_Data, SessionChange,
-    SessionMismatch_Data, WatchIdentityMismatch_Data,
+use signal_codex_harness_nexus::{
+    Changed, Changed_Malformed_Data, FoldRefusal, IdentityMismatch_Data, Observation,
+    OffsetReversed_Data, SessionMismatch_Data, StaleReading_Data, Transition_Data,
+    WatchIdentityMismatch_Data,
 };
+
+use crate::generated::folding::{FoldPlan, Folding, SessionChange};
 use crate::generated::memory::{MalformedRecord, Rollout, SessionRecord};
 use crate::generated::operation::EventBatch;
 
@@ -18,10 +19,10 @@ impl Folding for EventBatch {
                     if !self.observation_vector.iter().any(|observation| {
                         matches!(observation, Observation::Event(Event::Started))
                     }) {
-                        return Err(FoldRefusal::Unregistered(self.session.clone()));
+                        return Err(FoldRefusal::Unregistered(self.session_id.clone()));
                     }
                     SessionRecord {
-                        session: self.session.clone(),
+                        session_id: self.session_id.clone(),
                         observed: Observed {
                             flow_id: self.flow_id.clone(),
                             state: State::Dry,
@@ -32,10 +33,10 @@ impl Folding for EventBatch {
                     }
                 }
             };
-        if record.session != self.session {
+        if record.session_id != self.session_id {
             return Err(FoldRefusal::SessionMismatch(SessionMismatch_Data {
-                first_session: record.session,
-                second_session: self.session.clone(),
+                first_session_id: record.session_id,
+                second_session_id: self.session_id.clone(),
             }));
         }
         if record.observed.flow_id != self.flow_id {

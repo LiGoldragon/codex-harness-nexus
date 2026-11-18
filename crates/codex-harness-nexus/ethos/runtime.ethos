@@ -2,7 +2,7 @@ Library
 [ operation:[ Operation Outcome EventBatch ]
   folding:FoldPlan
   memory:SessionRecord
-  harness:[ Session FilePath ]
+  harness:[ SessionId FilePath ]
   nexus_exchange:LaneFailure
   signal_codex_harness_nexus:[ Hook ReportFailure Changed Diagnostic MemoryFault ]
   meta_signal_codex_harness_nexus:[ Set Configuration FlowsRoot IdentityProducer
@@ -11,7 +11,7 @@ Library
                        Capacity }
   Performed.{ Vector<Changed> Option<LaneFailure> } ]   ; committed; the lane failed only where the effect did not need it
 [ Diagnosing.[ diagnostic.[ Diagnostic ] ]
-  Sessional.[ session.[ Session ] ]
+  Sessional.[ session_id.[ SessionId ] ]
   Operable.[ operation.[ Operation ] ]
   Planned.[ plan.[ FoldPlan ] ]
   Settable.[ setting.[ Set ] ]

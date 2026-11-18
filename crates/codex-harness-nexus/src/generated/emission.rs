@@ -16,7 +16,7 @@ pub struct IdentityProducer(pub String);
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub struct ClaimIdentity_Data {
-    pub session: harness::Session,
+    pub session_id: harness::SessionId,
     pub flows_root: FlowsRoot,
     pub identity_producer: IdentityProducer,
 }
@@ -24,7 +24,7 @@ pub struct ClaimIdentity_Data {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub enum Emission {
-    FindRollout(harness::Session),
+    FindRollout(harness::SessionId),
     ClaimIdentity(ClaimIdentity_Data),
     ReadRollout(memory::Watch),
     IdentifyRollout(harness::FilePath),
@@ -64,7 +64,7 @@ pub enum RolloutReading_Data {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub enum RolloutIdentity_Data {
-    Identified(harness::Session),
+    Identified(harness::SessionId),
     Unidentified,
     LaneFailed(nexus_exchange::LaneFailure),
 }
@@ -87,7 +87,7 @@ pub trait Emittable<Translator>: Emitted {
     fn emit(&self, translator: &Translator) -> Self::Outcome;
 }
 #[rustfmt::skip]
-impl Emitted for harness::Session {
+impl Emitted for harness::SessionId {
     type Outcome = RolloutFinding_Data;
 }
 #[rustfmt::skip]

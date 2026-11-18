@@ -26,7 +26,7 @@ pub trait Diagnosing {
 }
 #[rustfmt::skip]
 pub trait Sessional {
-    fn session(&self) -> harness::Session;
+    fn session_id(&self) -> harness::SessionId;
 }
 #[rustfmt::skip]
 pub trait Operable {

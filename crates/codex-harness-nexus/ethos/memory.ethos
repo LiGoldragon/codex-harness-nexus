@@ -1,5 +1,5 @@
 Library
-[ harness:[ FilePath Session Observed ]
+[ harness:[ FilePath SessionId Observed ]
   flow:[ FlowId ]
   signal_codex_harness_nexus:[ ByteOffset ParseFailure Diagnostic ]
   meta_signal_codex_harness_nexus:Configuration
@@ -7,7 +7,7 @@ Library
   memory_engine:[ TableDescriptor TableName FamilyName SchemaHash ] ]
 [ Watch.{ FlowId FilePath ByteOffset }
   Rollout.[ Watched.Watch Pending.FilePath Unlocated ]
-  SessionRecord.{ Session Observed Rollout }
+  SessionRecord.{ SessionId Observed Rollout }
   MalformedRecord.{ FlowId ByteOffset ParseFailure }
   StoredConfiguration.{ Configuration } ]
 [ StorePath.[ path.[ FilePath ] ]

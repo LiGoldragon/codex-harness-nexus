@@ -1,10 +1,10 @@
-//! The kernel's word on the sessions directories. Codex makes its sessions
-//! directory lazily, so a configured directory may not be there yet: its
-//! watch rests on its nearest existing ancestor, and moves down at each
-//! creation until it rests on the directory itself, which is then watched
-//! whole, its subdirectories with it. A directory deleted or moved away
-//! returns its watch to its nearest existing ancestor. The watch wakes the
-//! Nexus, which reads only what was written. Nothing here keeps a clock.
+//! Native notification handles and generated placement behavior.
+//!
+//! A sessions directory is watched recursively once it exists; until then,
+//! its nearest existing ancestor is watched and the placement moves down as
+//! directory-created events arrive. An explicit rollout path is watched at
+//! its nearest existing parent, including when the path is outside every
+//! configured sessions directory. Its events match that path exactly.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -12,61 +12,59 @@ use std::sync::mpsc::Sender;
 
 use harness::FilePath;
 use meta_signal_codex_harness_nexus::{
-    AwaitedDirectories, ConfigurationChange, SessionsDirectories, UnwatchableDirectory,
+    AwaitedDirectories, SessionsDirectories, UnwatchableDirectories, UnwatchableDirectory,
 };
-use nexus::Publishing as _;
 use notify::event::{CreateKind, EventKind, ModifyKind, RenameMode};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher as _};
-use signal_codex_harness_nexus::{Diagnostic, ReportFailure};
+use signal_codex_harness_nexus::Diagnostic;
 
 use crate::generated::actor::{
-    Placement, PlacementPositioning as _, PlacementState as _, Reach, ReachCoverage as _, Settling,
-    WatchChangeKind, WatchConsequence, WatchEvent, WatchFailure, WatchGeneration, WatchResult,
-    WatchWord,
+    Placement, PlacementPositioning, PlacementState, Reach, ReachCoverage, Settling,
+    WatchChangeKind, WatchEvent, WatchFailure, WatchGeneration, WatchPlacement, WatchPlan,
+    WatchPlanBuilding, WatchResult, WatchTarget, WatchWord,
 };
-use crate::generated::memory::Rollout;
-use crate::generated::operation::Operation;
-use crate::generated::runtime::{Remembering, Waking};
-use crate::nexus::{HarnessNexus, Locking as _};
+use crate::generated::memory::{Rollout, SessionRecord};
 
-/// One watch of every configured sessions directory: the kernel's watcher,
-/// where each directory's watch rests, and each directory watched and how
-/// far.
+/// One native kernel watcher plus its typed target placements.
 pub struct DirectoryWatch {
     pub generation: WatchGeneration,
     pub watcher: RecommendedWatcher,
     pub placements: Vec<Placement>,
     pub watched: BTreeMap<PathBuf, Reach>,
+    pub failures: Vec<WatchFailure>,
 }
 
-/// The Nexus's watch of its sessions directories: the channel every watch
-/// it opens speaks into, the generations drawn, and the current watch, once
-/// sessions directories are known.
+/// The watch state owned exclusively by the core actor.
 pub struct SessionsWatch {
     pub sender: Sender<WatchWord>,
     pub drawn: WatchGeneration,
     pub current: Option<DirectoryWatch>,
+    pub unwatchable: Vec<UnwatchableDirectory>,
 }
 
-impl PlacementPositioning for FilePath {
+impl PlacementPositioning for WatchPlacement {
     fn placed(&self) -> Placement {
-        let path = Path::new(&self.0);
-        let resting = path
-            .ancestors()
-            .find(|ancestor| ancestor.is_dir())
-            .unwrap_or(path);
+        let target = Path::new(&self.file_path.0);
+        let start = match self.watch_target {
+            WatchTarget::SessionsDirectory => target,
+            WatchTarget::RolloutFile => target.parent().unwrap_or(target),
+        };
+        let resting = start.ancestors().find(|ancestor| ancestor.is_dir());
         Placement {
-            file_path: self.clone(),
-            file_path_option: Some(FilePath(resting.to_string_lossy().into_owned())),
+            file_path: self.file_path.clone(),
+            watch_target: self.watch_target.clone(),
+            file_path_option: resting.map(|path| FilePath(path.to_string_lossy().into_owned())),
         }
     }
 }
 
 impl PlacementState for Placement {
     fn arrived(&self) -> bool {
-        self.file_path_option
-            .as_ref()
-            .is_some_and(|resting| Path::new(&resting.0) == Path::new(&self.file_path.0))
+        matches!(self.watch_target, WatchTarget::SessionsDirectory)
+            && self
+                .file_path_option
+                .as_ref()
+                .is_some_and(|resting| Path::new(&resting.0) == Path::new(&self.file_path.0))
     }
 
     fn reach(&self) -> Reach {
@@ -128,6 +126,7 @@ impl From<notify::Result<notify::Event>> for WatchResult {
         match event {
             Ok(event) => Self::WatchEvent(event.into()),
             Err(error) => Self::WatchFailure(WatchFailure {
+                watch_target_option: None,
                 file_path_option: error
                     .paths
                     .first()
@@ -138,87 +137,17 @@ impl From<notify::Result<notify::Event>> for WatchResult {
     }
 }
 
-pub trait Replacing {
-    /// Opens a watch of these directories, each resting where it can; a
-    /// directory there that cannot be watched refuses the whole. No
-    /// directory is no watch.
-    fn opened(
-        &mut self,
-        directories: &SessionsDirectories,
-    ) -> Result<Option<DirectoryWatch>, UnwatchableDirectory>;
-
-    /// Takes this watch in place of the one before, which ends with it.
-    fn replaced(&mut self, watch: Option<DirectoryWatch>);
-
-    /// The configured directories not yet there.
-    fn awaited(&self) -> AwaitedDirectories;
-}
-
-impl Replacing for SessionsWatch {
-    fn opened(
-        &mut self,
-        directories: &SessionsDirectories,
-    ) -> Result<Option<DirectoryWatch>, UnwatchableDirectory> {
-        let Some(first) = directories.0.first() else {
-            return Ok(None);
-        };
-        let Some(next_generation) = self.drawn.0.checked_add(1) else {
-            return Err(UnwatchableDirectory {
-                file_path: first.clone(),
-                diagnostic: meta_signal_codex_harness_nexus::Diagnostic(
-                    "watch generation exhausted".to_owned(),
-                ),
-            });
-        };
-        self.drawn = WatchGeneration(next_generation);
-        let generation = self.drawn;
-        let sender = self.sender.clone();
-        // The kernel's watcher is refused only at its own limit, which the
-        // first directory is told under.
-        let watcher = notify::recommended_watcher(move |event| {
-            let _ = sender.send(WatchWord {
-                watch_generation: generation,
-                watch_result: event.into(),
-            });
-        })
-        .map_err(|error| UnwatchableDirectory {
-            file_path: first.clone(),
-            diagnostic: meta_signal_codex_harness_nexus::Diagnostic(error.to_string()),
-        })?;
-        let mut watch = DirectoryWatch {
-            generation,
-            watcher,
-            placements: directories
-                .0
-                .iter()
-                .map(PlacementPositioning::placed)
-                .collect(),
-            watched: BTreeMap::new(),
-        };
-        match watch.settle().into_iter().next() {
-            Some(unwatchable) => Err(unwatchable),
-            None => Ok(Some(watch)),
-        }
-    }
-
-    fn replaced(&mut self, watch: Option<DirectoryWatch>) {
-        self.current = watch;
-    }
-
-    fn awaited(&self) -> AwaitedDirectories {
-        self.current
-            .as_ref()
-            .map_or(AwaitedDirectories(vec![]), DirectoryWatch::awaited)
-    }
-}
-
 impl Settling for DirectoryWatch {
-    fn settle(&mut self) -> Vec<UnwatchableDirectory> {
-        let mut failures: Vec<UnwatchableDirectory> = vec![];
+    fn settle(&mut self) -> Vec<WatchFailure> {
+        let mut failures = Vec::new();
         loop {
             let mut moved = false;
             for index in 0..self.placements.len() {
-                let wanted = self.placements[index].file_path.placed();
+                let target = WatchPlacement {
+                    file_path: self.placements[index].file_path.clone(),
+                    watch_target: self.placements[index].watch_target.clone(),
+                };
+                let wanted = target.placed();
                 let Some(resting_path) = wanted.file_path_option.as_ref() else {
                     continue;
                 };
@@ -236,20 +165,18 @@ impl Settling for DirectoryWatch {
                         Ok(()) => {
                             self.watched.insert(resting.clone(), reach);
                         }
-                        // Gone between the look and the watch: look again.
                         Err(error) if matches!(error.kind, notify::ErrorKind::PathNotFound) => {
                             moved = true;
                             continue;
                         }
                         Err(error) => {
-                            let unwatchable = UnwatchableDirectory {
-                                file_path: FilePath(resting.to_string_lossy().into_owned()),
-                                diagnostic: meta_signal_codex_harness_nexus::Diagnostic(
-                                    error.to_string(),
-                                ),
+                            let failure = WatchFailure {
+                                watch_target_option: Some(target.watch_target),
+                                file_path_option: Some(target.file_path),
+                                diagnostic: Diagnostic(error.to_string()),
                             };
-                            if !failures.contains(&unwatchable) {
-                                failures.push(unwatchable);
+                            if !failures.contains(&failure) {
+                                failures.push(failure);
                             }
                             continue;
                         }
@@ -258,7 +185,6 @@ impl Settling for DirectoryWatch {
                 self.placements[index] = wanted;
                 moved = true;
             }
-            // Only what some directory still rests on stays watched.
             let resting: Vec<PathBuf> = self
                 .placements
                 .iter()
@@ -266,7 +192,7 @@ impl Settling for DirectoryWatch {
                     placement
                         .file_path_option
                         .as_ref()
-                        .map(|resting| PathBuf::from(&resting.0))
+                        .map(|path| PathBuf::from(&path.0))
                 })
                 .collect();
             let released: Vec<PathBuf> = self
@@ -280,20 +206,20 @@ impl Settling for DirectoryWatch {
                 self.watched.remove(&path);
             }
             if !moved {
+                self.failures.clone_from(&failures);
                 return failures;
             }
         }
     }
 
     fn forget(&mut self, event: WatchEvent) {
-        let gone = matches!(
-            &event.watch_change_kind,
+        if !matches!(
+            event.watch_change_kind,
             WatchChangeKind::Removed | WatchChangeKind::RenamedFrom
-        );
-        if !gone {
+        ) {
             return;
         }
-        for file_path in &event.file_path_vector {
+        for file_path in event.file_path_vector {
             let path = PathBuf::from(&file_path.0);
             if self.watched.remove(&path).is_some() {
                 let _ = self.watcher.unwatch(&path);
@@ -311,21 +237,27 @@ impl Settling for DirectoryWatch {
     }
 
     fn written(&self, event: WatchEvent) -> Vec<FilePath> {
-        match &event.watch_change_kind {
-            WatchChangeKind::CreatedFolder => vec![],
+        match event.watch_change_kind {
+            WatchChangeKind::CreatedFolder => Vec::new(),
             WatchChangeKind::Created | WatchChangeKind::Modified => event
                 .file_path_vector
-                .iter()
+                .into_iter()
                 .filter(|file_path| {
                     let path = Path::new(&file_path.0);
-                    self.placements.iter().any(|placement| {
-                        let directory = Path::new(&placement.file_path.0);
-                        placement.arrived() && path.starts_with(directory) && path != directory
-                    })
+                    self.placements
+                        .iter()
+                        .any(|placement| match placement.watch_target {
+                            WatchTarget::SessionsDirectory => {
+                                let directory = Path::new(&placement.file_path.0);
+                                placement.arrived()
+                                    && path.starts_with(directory)
+                                    && path != directory
+                            }
+                            WatchTarget::RolloutFile => path == Path::new(&placement.file_path.0),
+                        })
                 })
-                .cloned()
                 .collect(),
-            _ => vec![],
+            _ => Vec::new(),
         }
     }
 
@@ -333,129 +265,161 @@ impl Settling for DirectoryWatch {
         AwaitedDirectories(
             self.placements
                 .iter()
-                .filter(|placement| !placement.arrived())
+                .filter(|placement| {
+                    placement.watch_target == WatchTarget::SessionsDirectory && !placement.arrived()
+                })
                 .map(|placement| placement.file_path.clone())
                 .collect(),
         )
     }
 }
 
-/// The Nexus's side of its watch.
-pub trait Watching {
-    /// Watches these directories in place of any watch before: as the
-    /// Nexus starts, the directories its Memory recorded.
-    fn watch(&self, directories: &SessionsDirectories) -> Result<(), UnwatchableDirectory>;
-
-    /// Follows one word of the kernel: lets go of a directory gone, moves
-    /// each watch to where it rests now, and tells a change in what is
-    /// awaited to the configuration's subscribers.
-    fn follow(&self, word: WatchWord) -> Vec<WatchConsequence>;
-}
-
-impl<Translator> Watching for HarnessNexus<Translator> {
-    fn watch(&self, directories: &SessionsDirectories) -> Result<(), UnwatchableDirectory> {
-        let mut sessions = self.sessions_watch.locked();
-        let watch = sessions.opened(directories)?;
-        sessions.replaced(watch);
-        if let Some(publisher) = self.configurations.locked().as_ref() {
-            publisher.publish(ConfigurationChange::AwaitedDirectories(sessions.awaited()));
+impl crate::generated::actor::SessionsWatching for SessionsWatch {
+    fn opened(&mut self, plan: WatchPlan) -> Result<Option<DirectoryWatch>, UnwatchableDirectory> {
+        if plan.watch_placement_vector.is_empty() {
+            return Ok(None);
         }
-        Ok(())
-    }
-
-    fn follow(&self, word: WatchWord) -> Vec<WatchConsequence> {
-        let mut sessions = self.sessions_watch.locked();
-        let Some(watch) = sessions
-            .current
-            .as_mut()
-            .filter(|watch| watch.generation == word.watch_generation)
-        else {
-            return vec![];
+        let first = plan.watch_placement_vector[0].file_path.clone();
+        let Some(next_generation) = self.drawn.0.checked_add(1) else {
+            return Err(UnwatchableDirectory {
+                file_path: first,
+                diagnostic: meta_signal_codex_harness_nexus::Diagnostic(
+                    "watch generation exhausted".to_owned(),
+                ),
+            });
         };
-        let event = match word.watch_result {
-            WatchResult::WatchEvent(event) => event,
-            WatchResult::WatchFailure(failure) => {
-                return vec![WatchConsequence::WatchFailure(failure)];
-            }
+        self.drawn = WatchGeneration(next_generation);
+        let generation = self.drawn;
+        let sender = self.sender.clone();
+        let watcher = notify::recommended_watcher(move |event| {
+            let _ = sender.send(WatchWord {
+                watch_generation: generation,
+                watch_result: event.into(),
+            });
+        })
+        .map_err(|error| UnwatchableDirectory {
+            file_path: first,
+            diagnostic: meta_signal_codex_harness_nexus::Diagnostic(error.to_string()),
+        })?;
+        let mut watch = DirectoryWatch {
+            generation,
+            watcher,
+            placements: plan
+                .watch_placement_vector
+                .into_iter()
+                .map(PlacementPositioning::placed)
+                .collect(),
+            watched: BTreeMap::new(),
+            failures: Vec::new(),
         };
-        let before = watch.awaited();
-        watch.forget(event.clone());
-        // A directory whose watch was lost is awaited until it is placed
-        // anew, so one made again at once is told as come to be there.
-        let unplaced = watch.awaited();
-        let written = watch.written(event);
-        let failures = watch
-            .settle()
-            .into_iter()
-            .map(|unwatchable| WatchFailure {
-                file_path_option: Some(unwatchable.file_path),
-                diagnostic: Diagnostic(unwatchable.diagnostic.0),
-            })
-            .collect();
-        let after = watch.awaited();
-        if before != after
-            && let Some(publisher) = self.configurations.locked().as_ref()
+        let failures = watch.settle();
+        if let Some(failure) = failures
+            .iter()
+            .find(|failure| failure.watch_target_option == Some(WatchTarget::SessionsDirectory))
         {
-            publisher.publish(ConfigurationChange::AwaitedDirectories(after.clone()));
+            return Err(UnwatchableDirectory {
+                file_path: failure.file_path_option.clone().unwrap_or(first),
+                diagnostic: meta_signal_codex_harness_nexus::Diagnostic(
+                    failure.diagnostic.0.clone(),
+                ),
+            });
         }
-        let arrived: Vec<FilePath> = unplaced
-            .0
-            .into_iter()
-            .filter(|directory| !after.0.contains(directory))
-            .collect();
-        let mut consequences: Vec<WatchConsequence> = failures
-            .into_iter()
-            .map(WatchConsequence::WatchFailure)
-            .collect();
-        if !arrived.is_empty() {
-            consequences.push(WatchConsequence::Arrived(arrived));
+        Ok(Some(watch))
+    }
+
+    fn replaced(&mut self, watch: Option<DirectoryWatch>) {
+        self.current = watch;
+    }
+
+    fn retarget(&mut self, plan: WatchPlan) -> Vec<WatchFailure> {
+        match self.current.as_mut() {
+            Some(current) => {
+                current.placements = plan
+                    .watch_placement_vector
+                    .into_iter()
+                    .map(PlacementPositioning::placed)
+                    .collect();
+                current.settle()
+            }
+            None => match self.opened(plan) {
+                Ok(watch) => {
+                    self.replaced(watch);
+                    self.current
+                        .as_ref()
+                        .map_or_else(Vec::new, |watch| watch.failures.clone())
+                }
+                Err(failure) => vec![WatchFailure {
+                    watch_target_option: Some(WatchTarget::SessionsDirectory),
+                    file_path_option: Some(failure.file_path),
+                    diagnostic: Diagnostic(failure.diagnostic.0),
+                }],
+            },
         }
-        if !written.is_empty() {
-            consequences.push(WatchConsequence::Written(written));
+    }
+
+    fn awaited(&self) -> AwaitedDirectories {
+        self.current
+            .as_ref()
+            .map_or_else(|| AwaitedDirectories(Vec::new()), Settling::awaited)
+    }
+
+    fn unwatchable(&self) -> UnwatchableDirectories {
+        let mut directories = self.unwatchable.clone();
+        if let Some(current) = &self.current {
+            for failure in current.failures.iter().filter(|failure| {
+                failure.watch_target_option == Some(WatchTarget::SessionsDirectory)
+            }) {
+                let Some(file_path) = &failure.file_path_option else {
+                    continue;
+                };
+                let directory = UnwatchableDirectory {
+                    file_path: file_path.clone(),
+                    diagnostic: meta_signal_codex_harness_nexus::Diagnostic(
+                        failure.diagnostic.0.clone(),
+                    ),
+                };
+                if !directories.contains(&directory) {
+                    directories.push(directory);
+                }
+            }
         }
-        consequences
+        UnwatchableDirectories(directories)
     }
 }
 
-impl<Translator> Waking for HarnessNexus<Translator> {
-    /// One look at startup, and again whenever a sessions directory comes
-    /// to be there: each watched rollout is read from its offset, and each
-    /// pending one attaches if it now exists.
-    fn startup(&self) -> Result<Vec<Operation>, ReportFailure> {
-        Ok(self
-            .store
-            .recall_all()
-            .map_err(ReportFailure::Unrecorded)?
+impl WatchPlanBuilding for SessionsWatch {
+    fn planned(
+        &self,
+        sessions_directories_option: Option<SessionsDirectories>,
+        records: Vec<SessionRecord>,
+    ) -> WatchPlan {
+        let mut watch_placement_vector: Vec<WatchPlacement> = sessions_directories_option
             .into_iter()
-            .filter_map(|record| match record.rollout {
-                Rollout::Watched(watch) => Some(Operation::Reading(watch)),
-                Rollout::Pending(path) if Path::new(&path.0).exists() => {
-                    Some(Operation::Discovering(path))
-                }
-                Rollout::Pending(_) | Rollout::Unlocated => None,
+            .flat_map(|directories| directories.0)
+            .map(|file_path| WatchPlacement {
+                file_path,
+                watch_target: WatchTarget::SessionsDirectory,
             })
-            .collect())
-    }
-
-    /// A written file that a session watches is read; any other is
-    /// discovered, which attaches it only to a session that waits for it.
-    fn woken(&self, written: Vec<FilePath>) -> Result<Vec<Operation>, ReportFailure> {
-        let records = self.store.recall_all().map_err(ReportFailure::Unrecorded)?;
-        let mut operations: Vec<Operation> = vec![];
-        for path in written {
-            let operation = records
-                .iter()
-                .find_map(|record| match &record.rollout {
-                    Rollout::Watched(watch) if watch.file_path == path => {
-                        Some(Operation::Reading(watch.clone()))
-                    }
-                    _ => None,
-                })
-                .unwrap_or(Operation::Discovering(path));
-            if !operations.contains(&operation) {
-                operations.push(operation);
+            .collect();
+        for record in records {
+            let file_path_option = match record.rollout {
+                Rollout::Pending(file_path) => Some(file_path),
+                Rollout::Watched(watch) => Some(watch.file_path),
+                Rollout::Unlocated => None,
+            };
+            let Some(file_path) = file_path_option else {
+                continue;
+            };
+            let placement = WatchPlacement {
+                file_path,
+                watch_target: WatchTarget::RolloutFile,
+            };
+            if !watch_placement_vector.contains(&placement) {
+                watch_placement_vector.push(placement);
             }
         }
-        Ok(operations)
+        WatchPlan {
+            watch_placement_vector,
+        }
     }
 }

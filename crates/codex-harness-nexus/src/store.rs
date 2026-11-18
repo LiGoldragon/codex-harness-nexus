@@ -10,7 +10,9 @@ use memory_engine::{
 };
 use meta_signal_codex_harness_nexus::Configuration;
 use signal::Following;
-use signal_codex_harness_nexus::{Changed, Diagnostic};
+use signal_codex_harness_nexus::{
+    Changed, Diagnostic, MemoryFault, MemoryFault_DuplicateSessions_Data, RecordCount,
+};
 
 use crate::diagnosing::Diagnosing as _;
 use crate::generated::folding::SessionChange;
@@ -27,7 +29,7 @@ const CONFIGURATION_KEY: &str = "configuration";
 
 impl EngineRecord for SessionRecord {
     fn record_key(&self) -> RecordKey {
-        RecordKey::new(self.session.0.clone())
+        RecordKey::new(self.session_id.0.clone())
     }
 }
 
@@ -122,34 +124,40 @@ impl StoreOpening for Store {
 }
 
 impl Remembering for Store {
-    fn recall<N: Sessional>(&self, input: N) -> Result<Option<SessionRecord>, Diagnostic> {
+    fn recall<N: Sessional>(&self, input: N) -> Result<Option<SessionRecord>, MemoryFault> {
         let snapshot = self
             .engine
             .match_records(QueryPlan::key(
                 self.sessions,
-                RecordKey::new(input.session().0),
+                RecordKey::new(input.session_id().0),
             ))
-            .map_err(|error| error.diagnostic())?;
+            .map_err(|error| MemoryFault::EngineFailed(error.diagnostic()))?;
         match snapshot.records() {
             [] => Ok(None),
             [record] => Ok(Some(record.clone())),
-            records => Err(Diagnostic(format!(
-                "{} session records under one key",
-                records.len()
-            ))),
+            records => Err(MemoryFault::DuplicateSessions(
+                MemoryFault_DuplicateSessions_Data {
+                    session_id: input.session_id(),
+                    record_count: RecordCount(i64::try_from(records.len()).map_err(|_| {
+                        MemoryFault::EngineFailed(Diagnostic(
+                            "session record count exceeds the supported range".to_owned(),
+                        ))
+                    })?),
+                },
+            )),
         }
     }
 
-    fn recall_all(&self) -> Result<Vec<SessionRecord>, Diagnostic> {
+    fn recall_all(&self) -> Result<Vec<SessionRecord>, MemoryFault> {
         Ok(self
             .engine
             .match_records(QueryPlan::all(self.sessions))
-            .map_err(|error| error.diagnostic())?
+            .map_err(|error| MemoryFault::EngineFailed(error.diagnostic()))?
             .records()
             .to_vec())
     }
 
-    fn commit<N: Planned>(&self, input: N) -> Result<Vec<Changed>, Diagnostic> {
+    fn commit<N: Planned>(&mut self, input: N) -> Result<Vec<Changed>, MemoryFault> {
         let plan = input.plan();
         let commit = self.engine.begin_atomic_commit();
         let mut commit = match plan.session_change {
@@ -161,15 +169,15 @@ impl Remembering for Store {
         }
         self.engine
             .commit_atomic(commit)
-            .map_err(|error| error.diagnostic())?;
+            .map_err(|error| MemoryFault::EngineFailed(error.diagnostic()))?;
         Ok(plan.changed_vector)
     }
 
-    fn configuration(&self) -> Result<Configuration, Diagnostic> {
+    fn configuration(&self) -> Result<Configuration, MemoryFault> {
         let snapshot = self
             .engine
             .match_records(QueryPlan::all(self.configuration))
-            .map_err(|error| error.diagnostic())?;
+            .map_err(|error| MemoryFault::EngineFailed(error.diagnostic()))?;
         match snapshot.records() {
             [] => Ok(Configuration {
                 text_budget_option: None,
@@ -180,18 +188,21 @@ impl Remembering for Store {
                 capacity_option: None,
             }),
             [stored] => Ok(stored.configuration.clone()),
-            records => Err(Diagnostic(format!(
-                "{} configuration records",
-                records.len()
+            records => Err(MemoryFault::DuplicateConfigurations(RecordCount(
+                i64::try_from(records.len()).map_err(|_| {
+                    MemoryFault::EngineFailed(Diagnostic(
+                        "configuration record count exceeds the supported range".to_owned(),
+                    ))
+                })?,
             ))),
         }
     }
 
-    fn configure<N: Settable>(&self, input: N) -> Result<Configuration, Diagnostic> {
+    fn configure<N: Settable>(&mut self, input: N) -> Result<Configuration, MemoryFault> {
         let present = !self
             .engine
             .match_records(QueryPlan::all(self.configuration))
-            .map_err(|error| error.diagnostic())?
+            .map_err(|error| MemoryFault::EngineFailed(error.diagnostic()))?
             .records()
             .is_empty();
         let configuration = Configuration::after(self.configuration()?, input.setting());
@@ -206,7 +217,7 @@ impl Remembering for Store {
         };
         self.engine
             .commit_atomic(commit)
-            .map_err(|error| error.diagnostic())?;
+            .map_err(|error| MemoryFault::EngineFailed(error.diagnostic()))?;
         Ok(configuration)
     }
 }

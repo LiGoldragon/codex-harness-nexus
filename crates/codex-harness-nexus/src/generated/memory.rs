@@ -24,7 +24,7 @@ pub enum Rollout {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub struct SessionRecord {
-    pub session: harness::Session,
+    pub session_id: harness::SessionId,
     pub observed: harness::Observed,
     pub rollout: Rollout,
 }

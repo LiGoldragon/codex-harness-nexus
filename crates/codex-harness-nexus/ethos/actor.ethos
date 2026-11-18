@@ -1,23 +1,27 @@
 Library
 [ harness:[ FilePath ]
-  codex_harness_nexus:[ DirectoryWatch SessionsWatch ]
+  codex_harness_nexus:[ DirectoryWatch SessionsWatch SessionRecord ]
   operation:Operation
   runtime:[ Operable Performed ]
   signal:Stream
   signal_codex_harness_nexus:[ Changed Hook Observations ReportFailure MemoryFault ]
   meta_signal_codex_harness_nexus:[ Configuration ConfigurationReadout
                                     ConfigurationChange AwaitedDirectories
+                                    UnwatchableDirectories
                                     ConfigurationRefusal Set SessionsDirectories
                                     UnwatchableDirectory ]
   signal_codex_harness_nexus:Diagnostic ]
 [ WatchGeneration.Integer
   WatchChangeKind.[ CreatedFolder Created Removed RenamedFrom Modified Other ]
   WatchEvent.{ WatchChangeKind Vector<FilePath> }
-  WatchFailure.{ Option<FilePath> Diagnostic }
+  WatchFailure.{ Option<WatchTarget> Option<FilePath> Diagnostic }
   WatchResult.[ WatchEvent WatchFailure ]
   WatchWord.{ WatchGeneration WatchResult }
   Reach.[ Entries Whole ]
-  Placement.{ FilePath Option<FilePath> }
+  WatchTarget.[ SessionsDirectory RolloutFile ]
+  WatchPlacement.{ FilePath WatchTarget }
+  WatchPlan.{ Vector<WatchPlacement> }
+  Placement.{ FilePath WatchTarget Option<FilePath> }
   WatchConsequence.[ Written.Vector<FilePath> Arrived.Vector<FilePath> WatchFailure ]
   ListenerFailure.[ Meta.String Public.String ]
   Opened.Boolean
@@ -38,17 +42,21 @@ Library
                         MemoryFault ] ]
 [ ConfigurationSetting.[ setting.[ Set ] ]
   SessionsDirectoriesSetting.[ sessions_directories.[ SessionsDirectories ] ]
-  PlacementPositioning.[ placed.[ Placement ] ]
+  PlacementPositioning.[ placed.{ [ WatchPlacement ] [ Placement ] } ]
   PlacementState.[ arrived.[ Boolean ] reach.[ Reach ] ]
   ReachCoverage.[ reaches.{ [ Reach ] [ Boolean ] } ]
-  Settling.[ settle!{ [] [ Vector<UnwatchableDirectory> ] }
+  Settling.[ settle!{ [] [ Vector<WatchFailure> ] }
               forget!{ [ WatchEvent ] [] }
               written.{ [ WatchEvent ] [ Vector<FilePath> ] }
               awaited.[ AwaitedDirectories ] ]
-  SessionsWatching.[ opened!{ [ SessionsDirectoriesSetting ]
+  SessionsWatching.[ opened!{ [ WatchPlan ]
                                 [ Result<Option<DirectoryWatch> UnwatchableDirectory> ] }
                      replaced!{ [ Option<DirectoryWatch> ] [] }
-                     awaited.[ AwaitedDirectories ] ]
+                     retarget!{ [ WatchPlan ] [ Vector<WatchFailure> ] }
+                     awaited.[ AwaitedDirectories ]
+                     unwatchable.[ UnwatchableDirectories ] ]
+  WatchPlanBuilding.[ planned.{ [ Option<SessionsDirectories> Vector<SessionRecord> ]
+                                  [ WatchPlan ] } ]
   PublicOpening.[ open_public.[ Result<Opened ListenerFailure> ] ]
   WatchWordInput.[ watch_word.[ WatchWord ] ]
   Reportable.[ hook.[ Hook ] ]
@@ -71,9 +79,9 @@ Library
                   configure!{ [ ConfigurationSetting ]
                               [ Result<Configuration ConfigurationRefusal> ] }
                   watch_sessions!{ [ SessionsDirectoriesSetting ]
-                                   [ Result<Opened UnwatchableDirectory> ] }
+                                   [ Result<Opened NexusControlFailure> ] }
                   follow_watch!{ [ WatchWord ] [ Vector<WatchConsequence> ] }
-                  open_public!{ [] [ Result<Opened ListenerFailure> ] }
+                  open_public!{ [] [ Result<Opened NexusControlFailure> ] }
                   initialize!{ [] [ Result<Opened NexusControlFailure> ] }
                   perform!{ [ Operable ] [ Result<Performed ReportFailure> ] }
                   report!{ [ Reportable ] [ Result<Performed ReportFailure> ] }
@@ -82,11 +90,11 @@ Library
                   subscribe_configuration!{ []
                     [ Result<Stream<ConfigurationReadout ConfigurationChange>
                                ConfigurationRefusal> ] } ] ]
-[ FilePath.[ PlacementPositioning ]
+[ WatchPlacement.[ PlacementPositioning ]
   Set.[ ConfigurationSetting ]
   SessionsDirectories.[ SessionsDirectoriesSetting ]
   WatchWord.[ WatchWordInput ]
   Hook.[ Reportable ]
   Placement.[ PlacementState ]
   Reach.[ ReachCoverage ]
-  SessionsWatch.[ SessionsWatching ] ]
+  SessionsWatch.[ SessionsWatching WatchPlanBuilding ] ]

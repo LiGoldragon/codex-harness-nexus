@@ -1,11 +1,11 @@
 Emission
-[ harness:[ Session FilePath ]
+[ harness:[ SessionId FilePath ]
   flow:[ FlowId ]
   memory:Watch
   nexus_exchange:[ LaneFailure ]
   signal_codex_harness_nexus:[ IdentityFailure Observation ByteOffset Diagnostic ] ]
-[ FindRollout.Session
-  ClaimIdentity.{ Session FlowsRoot.String IdentityProducer.String }
+[ FindRollout.SessionId
+  ClaimIdentity.{ SessionId FlowsRoot.String IdentityProducer.String }
   ReadRollout.Watch
   IdentifyRollout.FilePath ]
 [ RolloutFinding.[ Found.FilePath Unfound LaneFailed.LaneFailure ]
@@ -13,6 +13,6 @@ Emission
   RolloutReading.[ Read.{ Vector<Observation> ByteOffset }
                    Unreadable.Diagnostic
                    LaneFailed.LaneFailure ]
-  RolloutIdentity.[ Identified.Session Unidentified LaneFailed.LaneFailure ]
+  RolloutIdentity.[ Identified.SessionId Unidentified LaneFailed.LaneFailure ]
   LaneFailed.LaneFailure ]
 []
