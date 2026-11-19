@@ -380,11 +380,12 @@ impl crate::generated::actor::SessionsWatching for SessionsWatch {
     }
 
     fn merged(&mut self, plan: WatchPlan, failure_vector: Vec<WatchFailure>) {
-        let mut current = self.current.take().unwrap_or_default();
-        let mut candidate_vector: Vec<DirectoryWatch> = current
-            .drain(..)
-            .filter(|watch| watch.lifecycle == WatchLifecycle::Staged)
-            .collect();
+        let (mut current, mut candidate_vector): (Vec<DirectoryWatch>, Vec<DirectoryWatch>) = self
+            .current
+            .take()
+            .unwrap_or_default()
+            .into_iter()
+            .partition(|watch| watch.lifecycle == WatchLifecycle::Active);
         current.retain(|watch| {
             watch.placements.iter().any(|active| {
                 plan.watch_placement_vector.iter().any(|planned| {
