@@ -8,7 +8,7 @@ flow = { package = "flow-ethos", git = "https://github.com/LiGoldragon/flow", re
 signal = { git = "https://github.com/LiGoldragon/signal", rev = "4f5cbb9", default-features = false }
 signal-codex-harness-nexus = { git = "https://github.com/LiGoldragon/signal-codex-harness-nexus", rev = "68dafec69a6f733cbee74a7a990b9aeffd0c4873", default-features = false }
 meta-signal-codex-harness-nexus = { git = "https://github.com/LiGoldragon/meta-signal-codex-harness-nexus", rev = "b6039b70491a2b4b778af4b094c3b5782da2964e", default-features = false }
-nexus = { git = "https://github.com/LiGoldragon/nexus", rev = "d020a62", default-features = false }
+nexus = { git = "https://github.com/LiGoldragon/nexus", rev = "24804e89416fd64644355527ee219d7a40d3462e", default-features = false }
 nexus-exchange = { git = "https://github.com/LiGoldragon/nexus", rev = "a4bc0113c10c34ec9d92cde2d650eca9324144db", default-features = false }
 nexus-serving = { git = "https://github.com/LiGoldragon/nexus", rev = "a4bc0113c10c34ec9d92cde2d650eca9324144db", default-features = false }
 shared-translator = { package = "translator", git = "https://github.com/LiGoldragon/translator", rev = "29601a3", default-features = false, features = ["unix"] }
