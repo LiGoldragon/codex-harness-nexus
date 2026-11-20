@@ -431,7 +431,7 @@ rec {
           }
         ];
         features = {
-          "datom" = [ "dep:datom-codec" "dep:protos" "harness/datom" "flow/datom" "signal/datom" "signal-codex-harness-nexus/datom" "meta-signal-codex-harness-nexus/datom" "shared-translator/datom" "nexus-exchange/datom" ];
+          "datom" = [ "nexus/datom" "dep:datom-codec" "dep:protos" "harness/datom" "flow/datom" "signal/datom" "signal-codex-harness-nexus/datom" "meta-signal-codex-harness-nexus/datom" "shared-translator/datom" "nexus-exchange/datom" ];
         };
         resolvedDefaultFeatures = [ "datom" "default" ];
       };
@@ -1650,9 +1650,19 @@ rec {
         };
         dependencies = [
           {
+            name = "datom-codec";
+            packageId = "datom-codec";
+            optional = true;
+          }
+          {
             name = "futures-util";
             packageId = "futures-util";
             usesDefaultFeatures = false;
+          }
+          {
+            name = "protos";
+            packageId = "protos";
+            optional = true;
           }
           {
             name = "rkyv";
@@ -1693,6 +1703,7 @@ rec {
         features = {
           "datom" = [ "dep:datom-codec" "dep:protos" ];
         };
+        resolvedDefaultFeatures = [ "datom" ];
       };
       "nexus-exchange" = rec {
         crateName = "nexus-exchange";

@@ -9,7 +9,7 @@ publish = false
 
 [features]
 default = []
-datom = ["dep:datom-codec", "dep:protos", "harness/datom", "flow/datom", "signal/datom", "signal-codex-harness-nexus/datom", "meta-signal-codex-harness-nexus/datom", "shared-translator/datom", "nexus-exchange/datom"]
+datom = ["nexus/datom", "dep:datom-codec", "dep:protos", "harness/datom", "flow/datom", "signal/datom", "signal-codex-harness-nexus/datom", "meta-signal-codex-harness-nexus/datom", "shared-translator/datom", "nexus-exchange/datom"]
 
 [dependencies]
 harness.workspace = true
