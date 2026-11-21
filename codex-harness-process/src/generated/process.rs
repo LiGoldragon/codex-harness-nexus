@@ -36,10 +36,6 @@ pub struct Reported {}
 #[rustfmt::skip]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
-pub struct Changed(pub codex_harness::signal::Changed);
-#[rustfmt::skip]
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub struct Subscribed(pub alloc::vec::Vec<harness::Observed>);
 #[rustfmt::skip]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
@@ -141,7 +137,7 @@ pub enum Gift {
     Reported,
     Watch(codex_harness::memory::Watch),
     Observe(codex_harness::memory::Observe),
-    Changed(Changed),
+    Changed(codex_harness::signal::Changed_Data),
     FindRollout(codex_harness::emission::FindRollout_Data),
     Locate(codex_harness::memory::Locate),
     Follow(codex_harness::emission::Follow_Data),
@@ -208,12 +204,12 @@ impl core::convert::From<codex_harness::memory::Observe> for Gift {
     }
 }
 #[rustfmt::skip]
-impl process::Givable for Changed {
+impl process::Givable for codex_harness::signal::Changed_Data {
     type Returned = ();
 }
 #[rustfmt::skip]
-impl core::convert::From<Changed> for Gift {
-    fn from(gift: Changed) -> Gift {
+impl core::convert::From<codex_harness::signal::Changed_Data> for Gift {
+    fn from(gift: codex_harness::signal::Changed_Data) -> Gift {
         Gift::Changed(gift)
     }
 }

@@ -1,5 +1,5 @@
-The ethos of each root of the Codex Harness Nexus, in the forms of ethos-zero 31.1.0
-(github:LiGoldragon/ethos-zero, 6e6799526d9b9860834dc51ff77fe7a02af09fb9).
+The ethos of each root of the Codex Harness Nexus, in the forms of ethos-zero 31.1.1
+(github:LiGoldragon/ethos-zero, 8d69f1074401f3503c7311894c177b5b57e6a161).
 
 All six roots are checked and generated together, into codex-harness-process/src/generated/,
 which is checked in; nothing of the processes is written by hand but their bodies, in
@@ -13,8 +13,7 @@ ethos-zero 'Generate.{ [ «ethos/signal.ethos» «ethos/meta.ethos» «ethos/emi
   input is answered by the output of its place: Report by Reported, Subscribe by Subscribed,
   and Listening, the library's input every Nexus has (its translator tells it that it has
   begun to listen), by Acknowledged. Changed, the output a subscriber is sent as each session
-  changes, answers no input and stands last. It carries the Changed its types declare, which
-  the Memory's Observation holds.
+  changes, answers no input and stands last. Its inline payload is shared with the Memory's Observation.
 - meta.ethos is the meta contract: Configure, answered by Configured.
 - emission.ethos is the Emission root: Follow a rollout, and FindRollout in Codex's own record
   of its threads, the ThreadDatabase set on the meta surface.

@@ -147,7 +147,7 @@ impl MemoryProcess {
             .into_iter()
             .map(|event| {
                 observed.after(event.clone());
-                signal::Changed { flow_id: observe.flow_id.clone(), event, state: observed.state.clone() }
+                signal::Changed_Data { flow_id: observe.flow_id.clone(), event, state: observed.state.clone() }
             })
             .collect();
         if observed.state == State::Ended {
@@ -426,7 +426,7 @@ impl World {
         match gift {
             Gift::Reported => self.signal.answer(&identity, &Output::Reported),
             Gift::Subscribed(Subscribed(observed_vector)) => self.signal.subscribed(&identity, Output::Subscribed(observed_vector)),
-            Gift::Changed(Changed(changed)) => self.signal.publish(Output::Changed(changed)),
+            Gift::Changed(changed) => self.signal.publish(Output::Changed(changed)),
             Gift::Configured(Configured(set)) => self.signal.answer(&identity, &meta::Output::Configured(set)),
             Gift::Recall(Recall {}) => {
                 self.signal.subscribe(&identity);

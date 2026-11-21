@@ -161,7 +161,7 @@ impl Processable for ReportProcess {
             ReportTaken::Observation(Err(Unremembered {})) => Some(Reporting::Unremembered),
             ReportTaken::Observation(Ok(observation)) => {
                 for changed in observation.0 {
-                    manager.give(Changed(changed))
+                    manager.give(changed)
                 }
                 Some(Reporting::Observed)
             }
@@ -219,7 +219,7 @@ impl Processable for WatchProcess {
             WatchTaken::Observation(Err(Unremembered {})) => None,
             WatchTaken::Observation(Ok(observation)) => {
                 for changed in observation.0 {
-                    manager.give(Changed(changed))
+                    manager.give(changed)
                 }
                 None
             }
