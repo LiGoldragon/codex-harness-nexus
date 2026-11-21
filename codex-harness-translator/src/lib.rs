@@ -90,7 +90,7 @@ impl Translatable for Row {
 fn rows_after(path: &str, offset: &Offset, row_count: &RowCount) -> io::Result<Following_Data> {
     let mut file = BufReader::new(File::open(path)?);
     file.seek(SeekFrom::Start(offset.0.max(0) as u64))?;
-    let mut rows = Following_Data { row_vector: Vec::new(), offset: offset.clone() };
+    let mut rows = Following_Data { row_vector: Vec::new(), offset: *offset };
     let mut line = Vec::new();
     while (rows.row_vector.len() as i64) < row_count.0 {
         line.clear();
@@ -138,11 +138,11 @@ pub fn follow(mut stream: UnixStream, follow: Follow_Data) -> io::Result<()> {
         }
         if followed {
             let offset = match &read_from {
-                ReadFrom::Offset(offset) => offset.clone(),
+                ReadFrom::Offset(offset) => *offset,
                 ReadFrom::FileEnd => Offset(std::fs::metadata(&path)?.len().try_into().unwrap_or(i64::MAX)),
             };
             let rows = rows_after(&follow.file_path.0, &offset, &follow.row_count)?;
-            read_from = ReadFrom::Offset(rows.offset.clone());
+            read_from = ReadFrom::Offset(rows.offset);
             let full = rows.row_vector.len() as i64 >= follow.row_count.0;
             if !rows.row_vector.is_empty() {
                 rows.write_to(&mut stream)?;

@@ -81,7 +81,7 @@ impl MemoryProcess {
     /// A Watch's process, when the row count it is born with is configured;
     /// the thread database is moved in with it, as it is configured.
     fn process_of(&self, watch: &Watch) -> Option<Process> {
-        let row_count = self.records.row_count_option.clone()?;
+        let row_count = self.records.row_count_option?;
         Some(Process::Watch(WatchProcess {
             flow_id: watch.flow_id.clone(),
             session_id: watch.session_id.clone(),
@@ -155,7 +155,7 @@ impl MemoryProcess {
             self.records.watch_vector.retain(|watch| watch.flow_id != observe.flow_id);
         } else if let Some(offset) = observe.offset_option {
             for watch in self.records.watch_vector.iter_mut().filter(|watch| watch.flow_id == observe.flow_id) {
-                watch.read_from = ReadFrom::Offset(offset.clone());
+                watch.read_from = ReadFrom::Offset(offset);
             }
         }
         match self.keep() {

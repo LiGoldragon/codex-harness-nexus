@@ -171,7 +171,7 @@ impl Processable for ReportProcess {
 
 impl WatchProcess {
     fn follow<N: Giving<Gift>>(&self, file_path: &harness::FilePath, manager: &mut N) {
-        manager.give(Follow_Data { file_path: file_path.clone(), read_from: self.read_from.clone(), row_count: self.row_count.clone() });
+        manager.give(Follow_Data { file_path: file_path.clone(), read_from: self.read_from.clone(), row_count: self.row_count });
     }
 }
 
@@ -209,7 +209,7 @@ impl Processable for WatchProcess {
             // A path not kept is found again at the next birth.
             WatchTaken::Answer(_) => None,
             WatchTaken::Following(Ok(following)) => {
-                self.read_from = ReadFrom::Offset(following.offset.clone());
+                self.read_from = ReadFrom::Offset(following.offset);
                 let event_vector = following.row_vector.iter().flat_map(Observable::events).collect();
                 manager.give(Observe { flow_id: self.flow_id.clone(), event_vector, offset_option: Some(following.offset) });
                 None
