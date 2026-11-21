@@ -6,12 +6,13 @@ Signal
   Listening ]
 [ Reported
   Subscribed.Vector<Observed>
-  Changed.{ FlowId Event State }
-  Acknowledged ]
+  Acknowledged
+  Changed ]
 [ Source.[ Startup
            Resume
            Compact ]
   Hook.[ SessionStart.{ SessionId Option<FilePath> Source }
          PermissionRequest.SessionId
          PostToolUse.SessionId
-         PostCompact.{ SessionId Trigger } ] ]
+         PostCompact.{ SessionId Trigger } ]
+  Changed.{ FlowId Event State } ]

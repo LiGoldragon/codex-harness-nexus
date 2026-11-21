@@ -1,6 +1,6 @@
 [package]
 name = "codex-harness-process"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 publish = false
@@ -10,7 +10,7 @@ default = []
 datom = ["dep:datom-codec", "process/datom", "harness/datom", "flow/datom"]
 
 [dependencies]
-process = { package = "process-library", git = "https://github.com/LiGoldragon/process-library", rev = "d797e21" }
+process = { package = "process-library", git = "https://github.com/LiGoldragon/process-library", rev = "63bca61d040830d2c409c91a3a93a4bd934c75ff" }
 harness = { package = "harness-nexus-library", git = "https://github.com/LiGoldragon/harness-nexus-library", rev = "ae7e008" }
 flow = { package = "flow-ethos", git = "https://github.com/LiGoldragon/flow", rev = "062ef9e1", default-features = false }
 rkyv = { workspace = true }

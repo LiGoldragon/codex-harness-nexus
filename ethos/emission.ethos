@@ -1,4 +1,4 @@
-Signal
+Emission
 [ harness:[ SessionId FilePath Tokens Response ]
   codex_harness:[ Offset ReadFrom RowCount ]
   codex_harness:meta:[ ThreadDatabase ] ]

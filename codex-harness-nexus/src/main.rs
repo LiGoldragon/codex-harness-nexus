@@ -14,7 +14,7 @@ use std::thread;
 use codex_harness_process::*;
 use flow::FlowId;
 use harness::{Observed, State, Tokens, Transitionable};
-use process::{Arrival, Ended, Gave, Given, Identity, Living, Moment, Ownable, Owner, ProcessManager, Roots, Trace, Traced, Tracing};
+use process::{Answer, Arrival, Ended, Gave, Given, Identity, Living, Moment, Ownable, Owner, ProcessManager, Roots, Trace, Traced, Tracing, Unobserved, Unremembered};
 use transport::{Framed, Named, Place, Placed};
 
 struct CodexHarness;
@@ -32,26 +32,37 @@ enum Arrived {
 
 type Queue = Sender<Arrived>;
 
+/// What the memory holds, archived whole as its file: each session observed,
+/// each Watch, and the configuration its Keeps have come to.
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+struct Records {
+    observed_vector: Vec<Observed>,
+    watch_vector: Vec<Watch>,
+    row_count_option: Option<RowCount>,
+    thread_database_option: Option<ThreadDatabase>,
+    hook_name_vector: Vec<HookName>,
+}
+
 /// The memory process: one change at a time, each kept before it is answered.
 struct MemoryProcess {
-    remembered: Remembered,
+    records: Records,
     file: std::path::PathBuf,
 }
 
 impl MemoryProcess {
     fn open(place: &Place) -> MemoryProcess {
         let file = place.path::<CodexHarness>(Placed::Memory(VERSION));
-        let remembered = File::open(&file)
+        let records = File::open(&file)
             .ok()
-            .and_then(|file| Remembered::read_from(&mut BufReader::new(file)).ok().flatten())
-            .unwrap_or(Remembered { observed_vector: Vec::new(), watch_vector: Vec::new(), row_count_option: None, thread_database_option: None, hook_name_vector: Vec::new() });
-        MemoryProcess { remembered, file }
+            .and_then(|file| Records::read_from(&mut BufReader::new(file)).ok().flatten())
+            .unwrap_or(Records { observed_vector: Vec::new(), watch_vector: Vec::new(), row_count_option: None, thread_database_option: None, hook_name_vector: Vec::new() });
+        MemoryProcess { records, file }
     }
 
     fn keep(&self) -> Answer {
         let temporary = self.file.with_extension("next");
         let written = File::create(&temporary)
-            .and_then(|mut file| self.remembered.write_to(&mut file))
+            .and_then(|mut file| self.records.write_to(&mut file))
             .and_then(|()| std::fs::rename(&temporary, &self.file));
         match written {
             Ok(()) => Answer::Succeeded,
@@ -60,30 +71,30 @@ impl MemoryProcess {
     }
 
     fn holds_watch(&self, flow_id: &FlowId) -> bool {
-        self.remembered.watch_vector.iter().any(|watch| watch.flow_id == *flow_id)
+        self.records.watch_vector.iter().any(|watch| watch.flow_id == *flow_id)
     }
 
     fn unlocated(&self, flow_id: &FlowId) -> bool {
-        self.remembered.watch_vector.iter().any(|watch| watch.flow_id == *flow_id && watch.rollout == Rollout::Unlocated)
+        self.records.watch_vector.iter().any(|watch| watch.flow_id == *flow_id && watch.rollout == Rollout::Unlocated)
     }
 
     /// A Watch's process, when the row count it is born with is configured;
     /// the thread database is moved in with it, as it is configured.
     fn process_of(&self, watch: &Watch) -> Option<Process> {
-        let row_count = self.remembered.row_count_option.clone()?;
+        let row_count = self.records.row_count_option.clone()?;
         Some(Process::Watch(WatchProcess {
             flow_id: watch.flow_id.clone(),
             session_id: watch.session_id.clone(),
             rollout: watch.rollout.clone(),
             read_from: watch.read_from.clone(),
             row_count,
-            thread_database_option: self.remembered.thread_database_option.clone(),
+            thread_database_option: self.records.thread_database_option.clone(),
         }))
     }
 
     /// The rollout found for a Watch is kept with it.
     fn locate(&mut self, locate: Locate) -> Answer {
-        for watch in self.remembered.watch_vector.iter_mut().filter(|watch| watch.flow_id == locate.flow_id) {
+        for watch in self.records.watch_vector.iter_mut().filter(|watch| watch.flow_id == locate.flow_id) {
             watch.rollout = Rollout::Located(locate.file_path.clone());
         }
         self.keep()
@@ -92,7 +103,7 @@ impl MemoryProcess {
     /// A Watch of the same flow and session is kept as it is, with the offset
     /// read so far; a rollout it newly names is kept with it.
     fn watch(&mut self, watch: Watch) -> Answer {
-        if let Some(held) = self.remembered.watch_vector.iter_mut().find(|held| held.flow_id == watch.flow_id && held.session_id == watch.session_id) {
+        if let Some(held) = self.records.watch_vector.iter_mut().find(|held| held.flow_id == watch.flow_id && held.session_id == watch.session_id) {
             return match watch.rollout {
                 Rollout::Located(file_path) if held.rollout != Rollout::Located(file_path.clone()) => {
                     held.rollout = Rollout::Located(file_path);
@@ -101,17 +112,17 @@ impl MemoryProcess {
                 _ => Answer::Succeeded,
             };
         }
-        self.remembered.watch_vector.retain(|held| held.flow_id != watch.flow_id);
-        self.remembered.watch_vector.push(watch);
+        self.records.watch_vector.retain(|held| held.flow_id != watch.flow_id);
+        self.records.watch_vector.push(watch);
         self.keep()
     }
 
-    fn configure(&mut self, Configure(set): Configure) -> Answer {
+    fn configure(&mut self, Keep(set): Keep) -> Answer {
         match set {
-            Set::Hooks(hook_name_vector) => self.remembered.hook_name_vector = hook_name_vector,
-            Set::RemoveHook(hook_name) => self.remembered.hook_name_vector.retain(|held| *held != hook_name),
-            Set::RowCount(row_count) => self.remembered.row_count_option = Some(row_count),
-            Set::ThreadDatabase(thread_database) => self.remembered.thread_database_option = Some(thread_database),
+            Set::Hooks(hook_name_vector) => self.records.hook_name_vector = hook_name_vector,
+            Set::RemoveHook(hook_name) => self.records.hook_name_vector.retain(|held| *held != hook_name),
+            Set::RowCount(row_count) => self.records.row_count_option = Some(row_count),
+            Set::ThreadDatabase(thread_database) => self.records.thread_database_option = Some(thread_database),
         }
         self.keep()
     }
@@ -119,36 +130,38 @@ impl MemoryProcess {
     /// Applies each event and keeps the offset. What a Watch observes applies
     /// only while its Watch is kept. A session that has ended is forgotten, its
     /// Observed and its Watch, once its changes are answered.
-    fn observe(&mut self, observe: Observe) -> Observation {
+    fn observe(&mut self, observe: Observe) -> Result<Observation, Unremembered> {
         if observe.offset_option.is_some() && !self.holds_watch(&observe.flow_id) {
-            return Observation(Vec::new());
+            return Ok(Observation(Vec::new()));
         }
-        let position = match self.remembered.observed_vector.iter().position(|observed| observed.flow_id == observe.flow_id) {
+        let position = match self.records.observed_vector.iter().position(|observed| observed.flow_id == observe.flow_id) {
             Some(position) => position,
             None => {
-                self.remembered.observed_vector.push(Observed { flow_id: observe.flow_id.clone(), state: State::Dry, tokens: Tokens(0), background_work_vector: vec![] });
-                self.remembered.observed_vector.len() - 1
+                self.records.observed_vector.push(Observed { flow_id: observe.flow_id.clone(), state: State::Dry, tokens: Tokens(0), background_work_vector: vec![] });
+                self.records.observed_vector.len() - 1
             }
         };
-        let observed = &mut self.remembered.observed_vector[position];
+        let observed = &mut self.records.observed_vector[position];
         let changed = observe
             .event_vector
             .into_iter()
             .map(|event| {
                 observed.after(event.clone());
-                Changed { flow_id: observe.flow_id.clone(), event, state: observed.state.clone() }
+                signal::Changed { flow_id: observe.flow_id.clone(), event, state: observed.state.clone() }
             })
             .collect();
         if observed.state == State::Ended {
-            self.remembered.observed_vector.remove(position);
-            self.remembered.watch_vector.retain(|watch| watch.flow_id != observe.flow_id);
+            self.records.observed_vector.remove(position);
+            self.records.watch_vector.retain(|watch| watch.flow_id != observe.flow_id);
         } else if let Some(offset) = observe.offset_option {
-            for watch in self.remembered.watch_vector.iter_mut().filter(|watch| watch.flow_id == observe.flow_id) {
+            for watch in self.records.watch_vector.iter_mut().filter(|watch| watch.flow_id == observe.flow_id) {
                 watch.read_from = ReadFrom::Offset(offset.clone());
             }
         }
-        self.keep();
-        Observation(changed)
+        match self.keep() {
+            Answer::Succeeded => Ok(Observation(changed)),
+            Answer::Failed => Err(Unremembered {}),
+        }
     }
 }
 
@@ -213,7 +226,7 @@ impl SignalProcess {
             Input::Listening => Called::Listening,
         })?;
         SignalProcess::listen(place, Placed::MetaSocket, roots, arrived.clone(), queue.clone(), |call: MetaCall| match call.meta_input {
-            MetaInput::Configure(set) => Called::Born(Process::Configure(ConfigureProcess { caller: call.caller, set })),
+            meta::Input::Configure(set) => Called::Born(Process::Configure(ConfigureProcess { caller: call.caller, set })),
         })?;
         Ok(SignalProcess { arrived, connections: BTreeMap::new(), subscriptions: BTreeMap::new(), queue })
     }
@@ -295,14 +308,14 @@ impl EmissionSocket {
     }
 
     /// One outcome on its own connection, read beside the queue.
-    fn find(&self, identity: Identity, find_rollout: FindRollout, queue: Queue) {
+    fn find(&self, identity: Identity, find_rollout: FindRollout_Data, queue: Queue) {
         let given = move |identity: Identity, taken| Arrived::Arrival(Arrival::Given(Given { identity, taken: Taken::RolloutFinding(taken) }));
         let Some(mut stream) = self.submit(&Emission::FindRollout(find_rollout)) else {
             let _ = queue.send(given(identity, Err(Unobserved::Unsubmitted)));
             return;
         };
         thread::spawn(move || {
-            let finding = match RolloutFinding::read_from(&mut stream) {
+            let finding = match RolloutFinding_Data::read_from(&mut stream) {
                 Ok(Some(finding)) => Ok(finding),
                 _ => Err(Unobserved::Unanswered),
             };
@@ -310,7 +323,7 @@ impl EmissionSocket {
         });
     }
 
-    fn follow(&mut self, identity: Identity, follow: Follow, queue: Queue) {
+    fn follow(&mut self, identity: Identity, follow: Follow_Data, queue: Queue) {
         let given = move |identity: &Identity, taken| Arrived::Arrival(Arrival::Given(Given { identity: identity.clone(), taken: Taken::Following(taken) }));
         let Some(stream) = self.submit(&Emission::Follow(follow)) else {
             let _ = queue.send(given(&identity, Err(Unobserved::Unsubmitted)));
@@ -320,7 +333,7 @@ impl EmissionSocket {
         self.lasting.insert(identity.clone(), stream);
         thread::spawn(move || {
             loop {
-                match Following::read_from(&mut reading) {
+                match Following_Data::read_from(&mut reading) {
                     Ok(Some(following)) => {
                         if queue.send(given(&identity, Ok(following))).is_err() {
                             return;
@@ -369,7 +382,7 @@ impl World {
     fn bear_watches(&mut self) {
         let unborn: Vec<Process> = self
             .memory
-            .remembered
+            .records
             .watch_vector
             .iter()
             .filter(|watch| !self.watching.contains_key(&watch.flow_id))
@@ -412,21 +425,21 @@ impl World {
     fn carry(&mut self, Gave { identity, gift }: Gave<Gift>) {
         match gift {
             Gift::Reported => self.signal.answer(&identity, &Output::Reported),
-            Gift::Subscribed(subscribed) => self.signal.subscribed(&identity, Output::Subscribed(subscribed)),
-            Gift::Changed(changed) => self.signal.publish(Output::Changed(changed)),
-            Gift::Configured(Configured(set)) => self.signal.answer(&identity, &MetaOutput::Configured(set)),
-            Gift::Recall(Recall) => {
+            Gift::Subscribed(Subscribed(observed_vector)) => self.signal.subscribed(&identity, Output::Subscribed(observed_vector)),
+            Gift::Changed(Changed(changed)) => self.signal.publish(Output::Changed(changed)),
+            Gift::Configured(Configured(set)) => self.signal.answer(&identity, &meta::Output::Configured(set)),
+            Gift::Recall(Recall {}) => {
                 self.signal.subscribe(&identity);
-                let recollection = Recollection(self.memory.remembered.observed_vector.clone());
-                self.give_back(identity, Taken::Recollection(recollection));
+                let recollection = Recollection(self.memory.records.observed_vector.clone());
+                self.give_back(identity, Taken::Recollection(Ok(recollection)));
             }
             Gift::Watch(watch) => {
                 let answer = self.memory.watch(watch);
                 self.give_back(identity, Taken::Answer(answer));
                 self.bear_watches();
             }
-            Gift::Configure(configure) => {
-                let answer = self.memory.configure(configure);
+            Gift::Keep(keep) => {
+                let answer = self.memory.configure(keep);
                 self.give_back(identity, Taken::Answer(answer));
                 self.bear_watches();
             }

@@ -12,6 +12,7 @@ use std::process::ExitCode;
 
 use codex_harness_process::*;
 use harness::{FilePath, Response, SessionId, Tokens, Trigger};
+use process::{Caller, ProcessId, UserId};
 use rustix::event::{PollFd, PollFlags};
 use rustix::fs::inotify;
 use serde_json::Value;
@@ -46,7 +47,7 @@ impl Translatable for Hook {
         let value: Value = serde_json::from_str(payload).map_err(|_| Untranslated::Unreadable)?;
         let session_id = || text(&value, "session_id").map(SessionId);
         Ok(match text(&value, "hook_event_name")?.as_str() {
-            "SessionStart" => Hook::SessionStart(SessionStart {
+            "SessionStart" => Hook::SessionStart(SessionStart_Data {
                 session_id: session_id()?,
                 file_path_option: value.get("transcript_path").and_then(Value::as_str).filter(|path| !path.trim().is_empty()).map(|path| FilePath(path.to_owned())),
                 source: match text(&value, "source").ok().as_deref() {
@@ -57,7 +58,7 @@ impl Translatable for Hook {
             }),
             "PermissionRequest" => Hook::PermissionRequest(session_id()?),
             "PostToolUse" => Hook::PostToolUse(session_id()?),
-            "PostCompact" => Hook::PostCompact(PostCompact {
+            "PostCompact" => Hook::PostCompact(PostCompact_Data {
                 session_id: session_id()?,
                 trigger: match text(&value, "trigger")?.as_str() {
                     "manual" => Trigger::Manual,
@@ -86,10 +87,10 @@ impl Translatable for Row {
 }
 
 /// Reads the whole lines after the offset, at most the row count of them.
-fn rows_after(path: &str, offset: &Offset, row_count: &RowCount) -> io::Result<Following> {
+fn rows_after(path: &str, offset: &Offset, row_count: &RowCount) -> io::Result<Following_Data> {
     let mut file = BufReader::new(File::open(path)?);
     file.seek(SeekFrom::Start(offset.0.max(0) as u64))?;
-    let mut rows = Following { row_vector: Vec::new(), offset: offset.clone() };
+    let mut rows = Following_Data { row_vector: Vec::new(), offset: offset.clone() };
     let mut line = Vec::new();
     while (rows.row_vector.len() as i64) < row_count.0 {
         line.clear();
@@ -107,7 +108,7 @@ fn rows_after(path: &str, offset: &Offset, row_count: &RowCount) -> io::Result<F
 /// Nexus closes the connection. A rollout not yet written is waited for:
 /// its nearest existing ancestor is watched until each missing part appears.
 /// A path with no ancestor at all ends the connection, and the emission is Unanswered.
-pub fn follow(mut stream: UnixStream, follow: Follow) -> io::Result<()> {
+pub fn follow(mut stream: UnixStream, follow: Follow_Data) -> io::Result<()> {
     let path = std::path::PathBuf::from(&follow.file_path.0);
     let watching = inotify::init(inotify::CreateFlags::CLOEXEC)?;
     let mut appearing: Option<(std::path::PathBuf, i32)> = None;
@@ -207,13 +208,13 @@ pub fn call(text_socket: Placed) -> ExitCode {
 /// Finds a thread's rollout in Codex's own record of its threads, opened for
 /// reading alone; a thread the record does not hold, or a record that cannot
 /// be read, is Unfound.
-pub fn find(find_rollout: &FindRollout) -> RolloutFinding {
+pub fn find(find_rollout: &FindRollout_Data) -> RolloutFinding_Data {
     let opened = rusqlite::Connection::open_with_flags(&find_rollout.thread_database.0, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX);
     let found = opened.and_then(|database| {
         database.query_row("SELECT rollout_path FROM threads WHERE id = ?1", [&find_rollout.session_id.0], |row| row.get::<_, String>(0))
     });
     match found {
-        Ok(path) => RolloutFinding::Found(FilePath(path)),
-        Err(_) => RolloutFinding::Unfound,
+        Ok(path) => RolloutFinding_Data::Found(FilePath(path)),
+        Err(_) => RolloutFinding_Data::Unfound,
     }
 }

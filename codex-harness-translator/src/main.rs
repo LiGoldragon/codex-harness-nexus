@@ -9,6 +9,7 @@ use std::process::ExitCode;
 use std::thread;
 
 use codex_harness_process::*;
+use process::Caller;
 use codex_harness_translator::{CodexHarness, Translatable, caller, find, follow, itself};
 use datom_codec::Datomizable;
 use protos::{Protosizable, Textualizable};
@@ -142,7 +143,7 @@ fn main() -> ExitCode {
     listening(&place);
     serve_texts(texts, &place, |text, place| serve_text::<Input, Call, Output>(text, place, Placed::NexusSocket, |caller, input| Call { caller, input }));
     serve_texts(meta_texts, &place, |text, place| {
-        serve_text::<MetaInput, MetaCall, MetaOutput>(text, place, Placed::MetaSocket, |caller, meta_input| MetaCall { caller, meta_input })
+        serve_text::<meta::Input, MetaCall, meta::Output>(text, place, Placed::MetaSocket, |caller, meta_input| MetaCall { caller, meta_input })
     });
     for stream in hooks.incoming().flatten() {
         report(stream, &place);
