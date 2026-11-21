@@ -1,0 +1,17 @@
+Library
+[ harness:[ Event Observed FilePath ]
+  flow:[ FlowId ]
+  codex_harness:signal:[ Changed ]
+  codex_harness:meta:[ Set ]
+  codex_harness:memory:[ Watch ] ]
+[ Offset.Integer
+  RowCount.Integer
+  Answer.[ Succeeded Failed ]
+  Observe.{ FlowId Vector<Event> Option<Offset> }
+  Observation.Vector<Changed>
+  Locate.{ FlowId FilePath }
+  Configure.Set
+  Recall.{}
+  Recollection.Vector<Observed> ]
+[]
+[]

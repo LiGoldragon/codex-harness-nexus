@@ -1,0 +1,15 @@
+Memory
+[ harness:[ Session FilePath Observed ]
+  flow:[ FlowId ]
+  codex_harness:[ Offset RowCount ]
+  codex_harness:meta:[ HookName ThreadDatabase ] ]
+[ Watch.{ FlowId
+          Session
+          Rollout.[ Located.FilePath
+                    Unlocated ]
+          Offset }
+  Remembered.{ Vector<Observed>
+               Vector<Watch>
+               Option<RowCount>
+               Option<ThreadDatabase>
+               Vector<HookName> } ]

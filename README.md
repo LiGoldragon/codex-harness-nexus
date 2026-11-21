@@ -1,0 +1,22 @@
+# codex-harness-nexus
+
+The Codex Harness Nexus on the process library of Process.4, from vision codex-harness-nexus 0:
+it hears Codex's hooks, follows each session's rollout, and tells every subscriber what each
+session is doing.
+
+- process: the process library, copied whole from claude-harness-nexus until it is lifted into
+  its own repository.
+- transport: the place, the sockets and the framing, copied from claude-harness-nexus with the
+  Nexus's name made a value (Named).
+- codex-harness-process: the processes, Report, Watch, Subscribe and Configure, built with no_std.
+- codex-harness-nexus: the program, the manager on its queue and the world it traces into.
+- codex-harness-translator: the translator, the CLIs codex-harness and codex-harness-meta, the
+  hook client codex-harness-hook and the trace reader codex-harness-trace.
+
+```sh
+codex-harness-nexus '{ main /run/user/1000/nexus/main /home/example/.local/state/nexus/main }'
+codex-harness-translator '{ main /run/user/1000/nexus/main /home/example/.local/state/nexus/main }'
+codex-harness-meta 'Configure.RowCount.256'
+codex-harness-meta 'Configure.ThreadDatabase./home/example/.codex/state_5.sqlite'
+codex-harness 'Subscribe'
+```

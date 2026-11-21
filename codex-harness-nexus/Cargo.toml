@@ -1,0 +1,17 @@
+[package]
+name = "codex-harness-nexus"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+process = { path = "../process" }
+codex-harness-process = { path = "../codex-harness-process" }
+transport = { path = "../transport" }
+harness = { package = "harness-nexus-library", git = "https://github.com/LiGoldragon/harness-nexus-library", rev = "3613d63" }
+flow = { package = "flow-ethos", git = "https://github.com/LiGoldragon/flow", rev = "062ef9e1", default-features = false }
+rkyv = { workspace = true }
+
+[lints.rust]
+unsafe_code = "forbid"

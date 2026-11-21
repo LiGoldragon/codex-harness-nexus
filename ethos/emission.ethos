@@ -1,0 +1,14 @@
+Signal
+[ harness:[ Session FilePath Tokens Response ]
+  codex_harness:[ Offset RowCount ]
+  codex_harness:meta:[ ThreadDatabase ] ]
+[ Follow.{ FilePath Offset RowCount }
+  FindRollout.{ ThreadDatabase Session } ]
+[ Following.{ Vector<Row> Offset }
+  RolloutFinding.[ Found.FilePath
+                   Unfound ] ]
+[ Row.[ TaskStarted
+        TokenCount.Option<Tokens>
+        TaskComplete.Option<Response>
+        TurnAborted
+        Other ] ]

@@ -1,0 +1,20 @@
+[package]
+name = "codex-harness-process"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[features]
+default = []
+datom = ["dep:datom-codec", "process/datom", "harness/datom", "flow/datom"]
+
+[dependencies]
+process = { path = "../process" }
+harness = { package = "harness-nexus-library", git = "https://github.com/LiGoldragon/harness-nexus-library", rev = "3613d63" }
+flow = { package = "flow-ethos", git = "https://github.com/LiGoldragon/flow", rev = "062ef9e1", default-features = false }
+rkyv = { workspace = true }
+datom-codec = { workspace = true, optional = true }
+
+[lints.rust]
+unsafe_code = "forbid"

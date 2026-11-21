@@ -1,0 +1,10 @@
+Signal
+[ codex_harness:[ RowCount ] ]
+[ Configure.Set ]
+[ Configured.Set ]
+[ HookName.String
+  ThreadDatabase.String
+  Set.[ Hooks.Vector<HookName>
+        RemoveHook.HookName
+        RowCount
+        ThreadDatabase ] ]

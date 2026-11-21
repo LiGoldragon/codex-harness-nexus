@@ -1,0 +1,20 @@
+Process
+[ codex_harness:signal:[ Report Subscribe Reported Subscribed Changed ]
+  codex_harness:meta:[ Configure Configured ThreadDatabase ]
+  codex_harness:memory:[ Watch Rollout ]
+  codex_harness:[ Observe Locate Recall Configure RowCount ]
+  codex_harness:emission:[ Follow FindRollout ] ]
+[ Report.{ []
+           [ Reported Watch Observe Changed ]
+           Reporting }
+  Watch.{ [ RowCount Option<ThreadDatabase> ]
+          [ FindRollout Locate Follow Observe Changed ]
+          Watching }
+  Subscribe.{ []
+              [ Recall Subscribed ] }
+  Configure.{ []
+              [ Configure Configured ]
+              Configuring } ]
+[ Reporting.[ Observed Unremembered ]
+  Watching.[ Forgotten Unfollowed Unlocated ]
+  Configuring.[ Configured Unremembered ] ]

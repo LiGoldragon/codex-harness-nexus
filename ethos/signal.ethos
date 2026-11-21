@@ -1,0 +1,14 @@
+Signal
+[ harness:[ Session FilePath Trigger Event State Observed ]
+  flow:[ FlowId ] ]
+[ Report.Hook
+  Subscribe
+  Listening ]
+[ Reported
+  Subscribed.Vector<Observed>
+  Changed.{ FlowId Event State }
+  Acknowledged ]
+[ Hook.[ SessionStart.{ Session Option<FilePath> }
+         PermissionRequest.Session
+         PostToolUse.Session
+         PostCompact.{ Session Trigger } ] ]
