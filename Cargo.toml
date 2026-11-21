@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["process", "codex-harness-process", "transport", "codex-harness-nexus", "codex-harness-translator"]
+members = ["codex-harness-process", "transport", "codex-harness-nexus", "codex-harness-translator"]
 
 [workspace.dependencies]
 rkyv = { version = "0.8", default-features = false, features = ["alloc", "bytecheck", "little_endian", "pointer_width_32", "unaligned"] }

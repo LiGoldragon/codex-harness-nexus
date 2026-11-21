@@ -4,8 +4,7 @@ The Codex Harness Nexus on the process library of Process.4, from vision codex-h
 it hears Codex's hooks, follows each session's rollout, and tells every subscriber what each
 session is doing.
 
-- process: the process library, copied whole from claude-harness-nexus until it is lifted into
-  its own repository.
+- process-library (github LiGoldragon/process-library): the process library, taken by git.
 - transport: the place, the sockets and the framing, copied from claude-harness-nexus with the
   Nexus's name made a value (Named).
 - codex-harness-process: the processes, Report, Watch, Subscribe and Configure, built with no_std.
