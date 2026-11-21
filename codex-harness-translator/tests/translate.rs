@@ -33,6 +33,7 @@ fn each_rollout_row_is_told_by_its_payload_type() {
         r#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"t"}}"#,
         r#"{"type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":19147}}}}"#,
         r#"{"type":"event_msg","payload":{"type":"token_count","info":null}}"#,
+        r#"{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":108740},"last_token_usage":{"input_tokens":0,"cached_input_tokens":0,"output_tokens":0,"total_tokens":21979}}}}"#,
         r#"{"type":"event_msg","payload":{"type":"task_complete","last_agent_message":"Listed."}}"#,
         r#"{"type":"event_msg","payload":{"type":"task_complete","last_agent_message":null}}"#,
         r#"{"type":"event_msg","payload":{"type":"turn_aborted","reason":"interrupted"}}"#,
@@ -44,6 +45,7 @@ fn each_rollout_row_is_told_by_its_payload_type() {
         vec![
             Row::TaskStarted,
             Row::TokenCount(Some(Tokens(19147))),
+            Row::TokenCount(None),
             Row::TokenCount(None),
             Row::TaskComplete(Some(Response("Listed.".into()))),
             Row::TaskComplete(None),

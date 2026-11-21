@@ -66,13 +66,14 @@ impl Translatable for Hook {
 }
 
 impl Translatable for Row {
-    /// A rollout row is told by payload.type; every other row is Other.
+    /// A rollout row is told by payload.type; every other row is Other. A
+    /// count of no input, as Codex writes after a compaction, is no size.
     fn translate(line: &str) -> Result<Row, Untranslated> {
         let value: Value = serde_json::from_str(line).map_err(|_| Untranslated::Unreadable)?;
         Ok(match value.pointer("/payload/type").and_then(Value::as_str) {
             Some("task_started") => Row::TaskStarted,
             Some("turn_aborted") => Row::TurnAborted,
-            Some("token_count") => Row::TokenCount(value.pointer("/payload/info/last_token_usage/input_tokens").and_then(Value::as_i64).map(Tokens)),
+            Some("token_count") => Row::TokenCount(value.pointer("/payload/info/last_token_usage/input_tokens").and_then(Value::as_i64).filter(|input| *input > 0).map(Tokens)),
             Some("task_complete") => Row::TaskComplete(value.pointer("/payload/last_agent_message").and_then(Value::as_str).map(|response| Response(response.to_owned()))),
             _ => Row::Other,
         })
