@@ -260,7 +260,7 @@ rec {
       };
       "codex-harness-nexus" = rec {
         crateName = "codex-harness-nexus";
-        version = "0.2.0";
+        version = "0.3.0";
         edition = "2024";
         crateBin = [
           {
@@ -306,7 +306,7 @@ rec {
       };
       "codex-harness-process" = rec {
         crateName = "codex-harness-process";
-        version = "0.2.0";
+        version = "0.3.0";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./codex-harness-process; };
         libName = "codex_harness_process";
@@ -346,7 +346,7 @@ rec {
       };
       "codex-harness-translator" = rec {
         crateName = "codex-harness-translator";
-        version = "0.2.1";
+        version = "0.3.0";
         edition = "2024";
         crateBin = [
           {

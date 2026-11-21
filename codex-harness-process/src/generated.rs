@@ -24,7 +24,8 @@ generated! {
     pub struct ProcessId(pub i64);
     pub struct UserId(pub i64);
     pub struct Caller { pub process_id: ProcessId, pub user_id: UserId }
-    pub struct SessionStart { pub session_id: SessionId, pub file_path_option: Option<FilePath> }
+    pub enum Source { Startup, Resume, Compact }
+    pub struct SessionStart { pub session_id: SessionId, pub file_path_option: Option<FilePath>, pub source: Source }
     pub struct PostCompact { pub session_id: SessionId, pub trigger: Trigger }
     pub enum Hook {
         SessionStart(SessionStart),
@@ -51,11 +52,12 @@ generated! {
 
     // Library: the changes and their types, until the Memory page places them
     pub struct Offset(pub i64);
+    pub enum ReadFrom { FileEnd, Offset(Offset) }
     pub struct RowCount(pub i64);
 
     // Memory
     pub enum Rollout { Located(FilePath), Unlocated }
-    pub struct Watch { pub flow_id: FlowId, pub session_id: SessionId, pub rollout: Rollout, pub offset: Offset }
+    pub struct Watch { pub flow_id: FlowId, pub session_id: SessionId, pub rollout: Rollout, pub read_from: ReadFrom }
     pub struct Observe { pub flow_id: FlowId, pub event_vector: Vec<Event>, pub offset_option: Option<Offset> }
     pub struct Observation(pub Vec<Changed>);
     pub enum Answer { Succeeded, Failed }
@@ -72,7 +74,7 @@ generated! {
     }
 
     // Emission
-    pub struct Follow { pub file_path: FilePath, pub offset: Offset, pub row_count: RowCount }
+    pub struct Follow { pub file_path: FilePath, pub read_from: ReadFrom, pub row_count: RowCount }
     pub struct Following { pub row_vector: Vec<Row>, pub offset: Offset }
     pub struct FindRollout { pub thread_database: ThreadDatabase, pub session_id: SessionId }
     pub enum RolloutFinding { Found(FilePath), Unfound }
@@ -87,7 +89,7 @@ generated! {
         pub flow_id: FlowId,
         pub session_id: SessionId,
         pub rollout: Rollout,
-        pub offset: Offset,
+        pub read_from: ReadFrom,
         pub row_count: RowCount,
         pub thread_database_option: Option<ThreadDatabase>,
     }

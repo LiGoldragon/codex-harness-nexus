@@ -8,7 +8,10 @@ Signal
   Subscribed.Vector<Observed>
   Changed.{ FlowId Event State }
   Acknowledged ]
-[ Hook.[ SessionStart.{ SessionId Option<FilePath> }
+[ Source.[ Startup
+           Resume
+           Compact ]
+  Hook.[ SessionStart.{ SessionId Option<FilePath> Source }
          PermissionRequest.SessionId
          PostToolUse.SessionId
          PostCompact.{ SessionId Trigger } ] ]

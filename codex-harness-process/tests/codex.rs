@@ -62,7 +62,7 @@ fn report(hook: Hook) -> World {
 fn watch(rollout: Rollout, thread_database_option: Option<ThreadDatabase>) -> (ProcessManager<Process>, World) {
     let mut manager = ProcessManager::default();
     let mut world = World::default();
-    let process = Process::Watch(WatchProcess { flow_id: flow_id(), session_id: session_id(), rollout, offset: Offset(0), row_count: RowCount(64), thread_database_option });
+    let process = Process::Watch(WatchProcess { flow_id: flow_id(), session_id: session_id(), rollout, read_from: ReadFrom::Offset(Offset(0)), row_count: RowCount(64), thread_database_option });
     manager.bear(Living { identity: root(), process }, &mut world);
     (manager, world)
 }
@@ -84,12 +84,12 @@ fn two_codex_sessions_begun_close_together_are_two_flows() {
 #[test]
 fn a_session_start_with_its_rollout_keeps_a_located_watch() {
     let rollout = FilePath("/home/example/.codex/sessions/2026/11/20/rollout-2026-11-20T21-49-50-01a1fc39-854c-7721-8339-0495bf476131.jsonl".into());
-    let world = report(Hook::SessionStart(SessionStart { session_id: session_id(), file_path_option: Some(rollout.clone()) }));
+    let world = report(Hook::SessionStart(SessionStart { session_id: session_id(), file_path_option: Some(rollout.clone()), source: Source::Startup }));
     assert_eq!(
         gifts(&world),
         vec![
             Gift::Reported,
-            Gift::Watch(Watch { flow_id: flow_id(), session_id: session_id(), rollout: Rollout::Located(rollout), offset: Offset(0) }),
+            Gift::Watch(Watch { flow_id: flow_id(), session_id: session_id(), rollout: Rollout::Located(rollout), read_from: ReadFrom::Offset(Offset(0)) }),
             Gift::Observe(Observe { flow_id: flow_id(), event_vector: vec![Event::Started], offset_option: None }),
         ]
     );
@@ -97,8 +97,35 @@ fn a_session_start_with_its_rollout_keeps_a_located_watch() {
 
 #[test]
 fn a_session_start_without_its_rollout_keeps_an_unlocated_watch() {
-    let world = report(Hook::SessionStart(SessionStart { session_id: session_id(), file_path_option: None }));
-    assert_eq!(gifts(&world)[1], Gift::Watch(Watch { flow_id: flow_id(), session_id: session_id(), rollout: Rollout::Unlocated, offset: Offset(0) }));
+    let world = report(Hook::SessionStart(SessionStart { session_id: session_id(), file_path_option: None, source: Source::Startup }));
+    assert_eq!(gifts(&world)[1], Gift::Watch(Watch { flow_id: flow_id(), session_id: session_id(), rollout: Rollout::Unlocated, read_from: ReadFrom::Offset(Offset(0)) }));
+}
+
+#[test]
+fn a_resumed_session_is_resumed_and_read_from_its_rollout_end() {
+    let rollout = FilePath("/t/rollout.jsonl".into());
+    let world = report(Hook::SessionStart(SessionStart { session_id: session_id(), file_path_option: Some(rollout.clone()), source: Source::Resume }));
+    assert_eq!(
+        gifts(&world)[1..],
+        [
+            Gift::Watch(Watch { flow_id: flow_id(), session_id: session_id(), rollout: Rollout::Located(rollout), read_from: ReadFrom::FileEnd }),
+            Gift::Observe(Observe { flow_id: flow_id(), event_vector: vec![Event::Resumed], offset_option: None }),
+        ]
+    );
+}
+
+/// The start Codex announces again after a compaction leaves the session as it is.
+#[test]
+fn a_session_start_after_a_compaction_gives_no_event() {
+    let rollout = FilePath("/t/rollout.jsonl".into());
+    let world = report(Hook::SessionStart(SessionStart { session_id: session_id(), file_path_option: Some(rollout.clone()), source: Source::Compact }));
+    assert_eq!(
+        gifts(&world)[1..],
+        [
+            Gift::Watch(Watch { flow_id: flow_id(), session_id: session_id(), rollout: Rollout::Located(rollout), read_from: ReadFrom::FileEnd }),
+            Gift::Observe(Observe { flow_id: flow_id(), event_vector: vec![], offset_option: None }),
+        ]
+    );
 }
 
 #[test]
@@ -120,7 +147,7 @@ fn an_unlocated_watch_finds_its_rollout_keeps_it_and_follows_it() {
         vec![
             Gift::FindRollout(FindRollout { thread_database: database, session_id: session_id() }),
             Gift::Locate(Locate { flow_id: flow_id(), file_path: rollout.clone() }),
-            Gift::Follow(Follow { file_path: rollout, offset: Offset(0), row_count: RowCount(64) }),
+            Gift::Follow(Follow { file_path: rollout, read_from: ReadFrom::Offset(Offset(0)), row_count: RowCount(64) }),
         ]
     );
     assert!(ended(&world).is_empty());

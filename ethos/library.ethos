@@ -5,6 +5,8 @@ Library
   codex_harness:meta:[ Set ]
   codex_harness:memory:[ Watch ] ]
 [ Offset.Integer
+  ReadFrom.[ FileEnd
+             Offset ]
   RowCount.Integer
   Answer.[ Succeeded Failed ]
   Observe.{ FlowId Vector<Event> Option<Offset> }

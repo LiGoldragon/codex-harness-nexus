@@ -75,7 +75,7 @@ impl MemoryProcess {
             flow_id: watch.flow_id.clone(),
             session_id: watch.session_id.clone(),
             rollout: watch.rollout.clone(),
-            offset: watch.offset.clone(),
+            read_from: watch.read_from.clone(),
             row_count,
             thread_database_option: self.remembered.thread_database_option.clone(),
         }))
@@ -89,9 +89,17 @@ impl MemoryProcess {
         self.keep()
     }
 
+    /// A Watch of the same flow and session is kept as it is, with the offset
+    /// read so far; a rollout it newly names is kept with it.
     fn watch(&mut self, watch: Watch) -> Answer {
-        if self.remembered.watch_vector.contains(&watch) {
-            return Answer::Succeeded;
+        if let Some(held) = self.remembered.watch_vector.iter_mut().find(|held| held.flow_id == watch.flow_id && held.session_id == watch.session_id) {
+            return match watch.rollout {
+                Rollout::Located(file_path) if held.rollout != Rollout::Located(file_path.clone()) => {
+                    held.rollout = Rollout::Located(file_path);
+                    self.keep()
+                }
+                _ => Answer::Succeeded,
+            };
         }
         self.remembered.watch_vector.retain(|held| held.flow_id != watch.flow_id);
         self.remembered.watch_vector.push(watch);
@@ -136,7 +144,7 @@ impl MemoryProcess {
             self.remembered.watch_vector.retain(|watch| watch.flow_id != observe.flow_id);
         } else if let Some(offset) = observe.offset_option {
             for watch in self.remembered.watch_vector.iter_mut().filter(|watch| watch.flow_id == observe.flow_id) {
-                watch.offset = offset.clone();
+                watch.read_from = ReadFrom::Offset(offset.clone());
             }
         }
         self.keep();

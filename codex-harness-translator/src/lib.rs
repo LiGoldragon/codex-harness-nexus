@@ -49,6 +49,11 @@ impl Translatable for Hook {
             "SessionStart" => Hook::SessionStart(SessionStart {
                 session_id: session_id()?,
                 file_path_option: value.get("transcript_path").and_then(Value::as_str).filter(|path| !path.trim().is_empty()).map(|path| FilePath(path.to_owned())),
+                source: match text(&value, "source").ok().as_deref() {
+                    Some("resume") => Source::Resume,
+                    Some("compact") => Source::Compact,
+                    _ => Source::Startup,
+                },
             }),
             "PermissionRequest" => Hook::PermissionRequest(session_id()?),
             "PostToolUse" => Hook::PostToolUse(session_id()?),
@@ -107,7 +112,7 @@ pub fn follow(mut stream: UnixStream, follow: Follow) -> io::Result<()> {
     let watching = inotify::init(inotify::CreateFlags::CLOEXEC)?;
     let mut appearing: Option<(std::path::PathBuf, i32)> = None;
     let mut followed = false;
-    let mut offset = follow.offset.clone();
+    let mut read_from = follow.read_from.clone();
     let mut events = [0u8; 4096];
     loop {
         while !followed {
@@ -131,10 +136,14 @@ pub fn follow(mut stream: UnixStream, follow: Follow) -> io::Result<()> {
             appearing = Some((nearest, watch));
         }
         if followed {
+            let offset = match &read_from {
+                ReadFrom::Offset(offset) => offset.clone(),
+                ReadFrom::FileEnd => Offset(std::fs::metadata(&path)?.len().try_into().unwrap_or(i64::MAX)),
+            };
             let rows = rows_after(&follow.file_path.0, &offset, &follow.row_count)?;
+            read_from = ReadFrom::Offset(rows.offset.clone());
             let full = rows.row_vector.len() as i64 >= follow.row_count.0;
             if !rows.row_vector.is_empty() {
-                offset = rows.offset.clone();
                 rows.write_to(&mut stream)?;
             }
             if full {

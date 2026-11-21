@@ -58,7 +58,12 @@ impl Identifiable for Hook {
 impl Observable for Hook {
     fn events(&self) -> Vec<Event> {
         match self {
-            Hook::SessionStart(_) => vec![Event::Started],
+            // A resume is Resumed; a compaction gives no event from this hook, its own does.
+            Hook::SessionStart(start) => match start.source {
+                Source::Startup => vec![Event::Started],
+                Source::Resume => vec![Event::Resumed],
+                Source::Compact => vec![],
+            },
             Hook::PermissionRequest(_) => vec![Event::PermissionAsked],
             Hook::PostToolUse(_) => vec![Event::ToolUsed],
             Hook::PostCompact(compact) => vec![Event::Compacted(Compaction { trigger: compact.trigger.clone(), tokens_option: None })],
@@ -91,7 +96,12 @@ impl Processable for ReportProcess {
                 Some(file_path) => Rollout::Located(file_path.clone()),
                 None => Rollout::Unlocated,
             };
-            manager.give(Watch { flow_id: start.session_id.identify(), session_id: start.session_id.clone(), rollout, offset: Offset(0) });
+            // A session that started is read from its first row; one resumed or compacted from the file's end.
+            let read_from = match start.source {
+                Source::Startup => ReadFrom::Offset(Offset(0)),
+                Source::Resume | Source::Compact => ReadFrom::FileEnd,
+            };
+            manager.give(Watch { flow_id: start.session_id.identify(), session_id: start.session_id.clone(), rollout, read_from });
         }
         manager.give(Observe { flow_id: self.hook.identify(), event_vector: self.hook.events(), offset_option: None });
         None
@@ -113,7 +123,7 @@ impl Processable for ReportProcess {
 
 impl WatchProcess {
     fn follow<N: Giving<Gift>>(&self, file_path: &harness::FilePath, manager: &mut N) {
-        manager.give(Follow { file_path: file_path.clone(), offset: self.offset.clone(), row_count: self.row_count.clone() });
+        manager.give(Follow { file_path: file_path.clone(), read_from: self.read_from.clone(), row_count: self.row_count.clone() });
     }
 }
 
@@ -151,9 +161,9 @@ impl Processable for WatchProcess {
             // A path not kept is found again at the next birth.
             WatchTaken::Answer(_) => None,
             WatchTaken::Following(Ok(following)) => {
-                self.offset = following.offset;
+                self.read_from = ReadFrom::Offset(following.offset.clone());
                 let event_vector = following.row_vector.iter().flat_map(Observable::events).collect();
-                manager.give(Observe { flow_id: self.flow_id.clone(), event_vector, offset_option: Some(self.offset.clone()) });
+                manager.give(Observe { flow_id: self.flow_id.clone(), event_vector, offset_option: Some(following.offset) });
                 None
             }
             WatchTaken::Following(Err(_)) => Some(Watching::Unfollowed),
