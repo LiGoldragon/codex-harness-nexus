@@ -11,7 +11,7 @@ use std::os::unix::net::UnixStream;
 use std::process::ExitCode;
 
 use codex_harness_process::*;
-use harness::{FilePath, Response, Session, Tokens, Trigger};
+use harness::{FilePath, Response, SessionId, Tokens, Trigger};
 use rustix::event::{PollFd, PollFlags};
 use rustix::fs::inotify;
 use serde_json::Value;
@@ -44,16 +44,16 @@ impl Translatable for Hook {
     /// session's start the rollout's path, which may be null.
     fn translate(payload: &str) -> Result<Hook, Untranslated> {
         let value: Value = serde_json::from_str(payload).map_err(|_| Untranslated::Unreadable)?;
-        let session = || text(&value, "session_id").map(Session);
+        let session_id = || text(&value, "session_id").map(SessionId);
         Ok(match text(&value, "hook_event_name")?.as_str() {
             "SessionStart" => Hook::SessionStart(SessionStart {
-                session: session()?,
+                session_id: session_id()?,
                 file_path_option: value.get("transcript_path").and_then(Value::as_str).filter(|path| !path.trim().is_empty()).map(|path| FilePath(path.to_owned())),
             }),
-            "PermissionRequest" => Hook::PermissionRequest(session()?),
-            "PostToolUse" => Hook::PostToolUse(session()?),
+            "PermissionRequest" => Hook::PermissionRequest(session_id()?),
+            "PostToolUse" => Hook::PostToolUse(session_id()?),
             "PostCompact" => Hook::PostCompact(PostCompact {
-                session: session()?,
+                session_id: session_id()?,
                 trigger: match text(&value, "trigger")?.as_str() {
                     "manual" => Trigger::Manual,
                     "auto" => Trigger::Automatic,
@@ -200,7 +200,7 @@ pub fn call(text_socket: Placed) -> ExitCode {
 pub fn find(find_rollout: &FindRollout) -> RolloutFinding {
     let opened = rusqlite::Connection::open_with_flags(&find_rollout.thread_database.0, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX);
     let found = opened.and_then(|database| {
-        database.query_row("SELECT rollout_path FROM threads WHERE id = ?1", [&find_rollout.session.0], |row| row.get::<_, String>(0))
+        database.query_row("SELECT rollout_path FROM threads WHERE id = ?1", [&find_rollout.session_id.0], |row| row.get::<_, String>(0))
     });
     match found {
         Ok(path) => RolloutFinding::Found(FilePath(path)),

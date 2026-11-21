@@ -260,7 +260,7 @@ rec {
       };
       "codex-harness-nexus" = rec {
         crateName = "codex-harness-nexus";
-        version = "0.1.0";
+        version = "0.2.0";
         edition = "2024";
         crateBin = [
           {
@@ -306,7 +306,7 @@ rec {
       };
       "codex-harness-process" = rec {
         crateName = "codex-harness-process";
-        version = "0.1.0";
+        version = "0.2.0";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./codex-harness-process; };
         libName = "codex_harness_process";
@@ -346,7 +346,7 @@ rec {
       };
       "codex-harness-translator" = rec {
         crateName = "codex-harness-translator";
-        version = "0.1.0";
+        version = "0.2.0";
         edition = "2024";
         crateBin = [
           {
@@ -758,13 +758,13 @@ rec {
       };
       "harness-nexus-library" = rec {
         crateName = "harness-nexus-library";
-        version = "0.1.0";
+        version = "0.3.0";
         edition = "2024";
         workspace_member = null;
         src = pkgs.fetchgit {
           url = "https://github.com/LiGoldragon/harness-nexus-library";
-          rev = "3613d63d0994de7841bcf6f070c83bebb0ddfa5a";
-          sha256 = "0s56yv6vhd8992hbqn277nmdqxmpn2xkvf9szlispr71fmq00k2j";
+          rev = "ae7e008700972b7f033de6ba94c36e6c49fc93f8";
+          sha256 = "0pzack9igg9qh0yb148pl4yy3a0v5ik3208abgd6gcisjsgxpsqb";
         };
         libName = "harness";
         dependencies = [

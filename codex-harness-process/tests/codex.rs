@@ -3,7 +3,7 @@
 
 use codex_harness_process::*;
 use flow::FlowId;
-use harness::{Event, FilePath, Response, Session, Tokens};
+use harness::{Event, FilePath, Response, SessionId, Tokens};
 use process::{Gave, Given, Identity, Living, Path, ProcessManager, Root, Trace, Traced, Tracing};
 
 #[derive(Default)]
@@ -25,8 +25,8 @@ fn flow_id() -> FlowId {
     FlowId("5bf476".into())
 }
 
-fn session() -> Session {
-    Session(THREAD.into())
+fn session_id() -> SessionId {
+    SessionId(THREAD.into())
 }
 
 fn gifts(world: &World) -> Vec<Gift> {
@@ -62,25 +62,34 @@ fn report(hook: Hook) -> World {
 fn watch(rollout: Rollout, thread_database_option: Option<ThreadDatabase>) -> (ProcessManager<Process>, World) {
     let mut manager = ProcessManager::default();
     let mut world = World::default();
-    let process = Process::Watch(WatchProcess { flow_id: flow_id(), session: session(), rollout, offset: Offset(0), row_count: RowCount(64), thread_database_option });
+    let process = Process::Watch(WatchProcess { flow_id: flow_id(), session_id: session_id(), rollout, offset: Offset(0), row_count: RowCount(64), thread_database_option });
     manager.bear(Living { identity: root(), process }, &mut world);
     (manager, world)
 }
 
 #[test]
 fn a_codex_flow_is_named_from_the_random_tail_of_its_thread_id_as_flow_id_codex_names_it() {
-    assert_eq!(session().identify(), flow_id());
+    assert_eq!(session_id().identify(), flow_id());
+}
+
+/// Two sessions Codex began four minutes apart share their first six
+/// characters, and are two flows.
+#[test]
+fn two_codex_sessions_begun_close_together_are_two_flows() {
+    let first = SessionId("01a1fc7b-1137-73b1-81ce-cafdb261d078".into());
+    let second = SessionId("01a1fc7f-bbad-7730-b6bc-02328450444f".into());
+    assert_ne!(first.identify(), second.identify());
 }
 
 #[test]
 fn a_session_start_with_its_rollout_keeps_a_located_watch() {
     let rollout = FilePath("/home/example/.codex/sessions/2026/11/20/rollout-2026-11-20T21-49-50-01a1fc39-854c-7721-8339-0495bf476131.jsonl".into());
-    let world = report(Hook::SessionStart(SessionStart { session: session(), file_path_option: Some(rollout.clone()) }));
+    let world = report(Hook::SessionStart(SessionStart { session_id: session_id(), file_path_option: Some(rollout.clone()) }));
     assert_eq!(
         gifts(&world),
         vec![
             Gift::Reported,
-            Gift::Watch(Watch { flow_id: flow_id(), session: session(), rollout: Rollout::Located(rollout), offset: Offset(0) }),
+            Gift::Watch(Watch { flow_id: flow_id(), session_id: session_id(), rollout: Rollout::Located(rollout), offset: Offset(0) }),
             Gift::Observe(Observe { flow_id: flow_id(), event_vector: vec![Event::Started], offset_option: None }),
         ]
     );
@@ -88,13 +97,13 @@ fn a_session_start_with_its_rollout_keeps_a_located_watch() {
 
 #[test]
 fn a_session_start_without_its_rollout_keeps_an_unlocated_watch() {
-    let world = report(Hook::SessionStart(SessionStart { session: session(), file_path_option: None }));
-    assert_eq!(gifts(&world)[1], Gift::Watch(Watch { flow_id: flow_id(), session: session(), rollout: Rollout::Unlocated, offset: Offset(0) }));
+    let world = report(Hook::SessionStart(SessionStart { session_id: session_id(), file_path_option: None }));
+    assert_eq!(gifts(&world)[1], Gift::Watch(Watch { flow_id: flow_id(), session_id: session_id(), rollout: Rollout::Unlocated, offset: Offset(0) }));
 }
 
 #[test]
 fn a_compaction_is_observed_with_its_trigger() {
-    let world = report(Hook::PostCompact(PostCompact { session: session(), trigger: harness::Trigger::Automatic }));
+    let world = report(Hook::PostCompact(PostCompact { session_id: session_id(), trigger: harness::Trigger::Automatic }));
     let compaction = harness::Compaction { trigger: harness::Trigger::Automatic, tokens_option: None };
     assert_eq!(gifts(&world)[1], Gift::Observe(Observe { flow_id: flow_id(), event_vector: vec![Event::Compacted(compaction)], offset_option: None }));
 }
@@ -109,7 +118,7 @@ fn an_unlocated_watch_finds_its_rollout_keeps_it_and_follows_it() {
     assert_eq!(
         gifts(&world),
         vec![
-            Gift::FindRollout(FindRollout { thread_database: database, session: session() }),
+            Gift::FindRollout(FindRollout { thread_database: database, session_id: session_id() }),
             Gift::Locate(Locate { flow_id: flow_id(), file_path: rollout.clone() }),
             Gift::Follow(Follow { file_path: rollout, offset: Offset(0), row_count: RowCount(64) }),
         ]

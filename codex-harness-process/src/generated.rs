@@ -8,7 +8,7 @@ use core::option::Option;
 use core::result::Result;
 
 use flow::FlowId;
-use harness::{Event, FilePath, Observed, Response, Session, State, Tokens, Trigger};
+use harness::{Event, FilePath, Observed, Response, SessionId, State, Tokens, Trigger};
 use process::{Givable, Giving, Ownable, Owner, Processable, Unwindable};
 
 macro_rules! generated {
@@ -24,12 +24,12 @@ generated! {
     pub struct ProcessId(pub i64);
     pub struct UserId(pub i64);
     pub struct Caller { pub process_id: ProcessId, pub user_id: UserId }
-    pub struct SessionStart { pub session: Session, pub file_path_option: Option<FilePath> }
-    pub struct PostCompact { pub session: Session, pub trigger: Trigger }
+    pub struct SessionStart { pub session_id: SessionId, pub file_path_option: Option<FilePath> }
+    pub struct PostCompact { pub session_id: SessionId, pub trigger: Trigger }
     pub enum Hook {
         SessionStart(SessionStart),
-        PermissionRequest(Session),
-        PostToolUse(Session),
+        PermissionRequest(SessionId),
+        PostToolUse(SessionId),
         PostCompact(PostCompact),
     }
     pub struct Reported;
@@ -55,7 +55,7 @@ generated! {
 
     // Memory
     pub enum Rollout { Located(FilePath), Unlocated }
-    pub struct Watch { pub flow_id: FlowId, pub session: Session, pub rollout: Rollout, pub offset: Offset }
+    pub struct Watch { pub flow_id: FlowId, pub session_id: SessionId, pub rollout: Rollout, pub offset: Offset }
     pub struct Observe { pub flow_id: FlowId, pub event_vector: Vec<Event>, pub offset_option: Option<Offset> }
     pub struct Observation(pub Vec<Changed>);
     pub enum Answer { Succeeded, Failed }
@@ -74,7 +74,7 @@ generated! {
     // Emission
     pub struct Follow { pub file_path: FilePath, pub offset: Offset, pub row_count: RowCount }
     pub struct Following { pub row_vector: Vec<Row>, pub offset: Offset }
-    pub struct FindRollout { pub thread_database: ThreadDatabase, pub session: Session }
+    pub struct FindRollout { pub thread_database: ThreadDatabase, pub session_id: SessionId }
     pub enum RolloutFinding { Found(FilePath), Unfound }
     pub enum Row { TaskStarted, TokenCount(Option<Tokens>), TaskComplete(Option<Response>), TurnAborted, Other }
     pub enum Unobserved { Unsubmitted, Unanswered }
@@ -85,7 +85,7 @@ generated! {
     pub struct ReportProcess { pub caller: Caller, pub hook: Hook }
     pub struct WatchProcess {
         pub flow_id: FlowId,
-        pub session: Session,
+        pub session_id: SessionId,
         pub rollout: Rollout,
         pub offset: Offset,
         pub row_count: RowCount,

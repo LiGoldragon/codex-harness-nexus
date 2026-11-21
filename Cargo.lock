@@ -61,7 +61,7 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
 name = "codex-harness-nexus"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "codex-harness-process",
  "flow-ethos",
@@ -73,7 +73,7 @@ dependencies = [
 
 [[package]]
 name = "codex-harness-process"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "datom-codec",
  "flow-ethos",
@@ -84,7 +84,7 @@ dependencies = [
 
 [[package]]
 name = "codex-harness-translator"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "codex-harness-process",
  "datom-codec",
@@ -208,8 +208,8 @@ dependencies = [
 
 [[package]]
 name = "harness-nexus-library"
-version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/harness-nexus-library?rev=3613d63#3613d63d0994de7841bcf6f070c83bebb0ddfa5a"
+version = "0.3.0"
+source = "git+https://github.com/LiGoldragon/harness-nexus-library?rev=ae7e008#ae7e008700972b7f033de6ba94c36e6c49fc93f8"
 dependencies = [
  "datom-codec",
  "flow-ethos",

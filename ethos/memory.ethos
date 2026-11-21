@@ -1,10 +1,10 @@
 Memory
-[ harness:[ Session FilePath Observed ]
+[ harness:[ SessionId FilePath Observed ]
   flow:[ FlowId ]
   codex_harness:[ Offset RowCount ]
   codex_harness:meta:[ HookName ThreadDatabase ] ]
 [ Watch.{ FlowId
-          Session
+          SessionId
           Rollout.[ Located.FilePath
                     Unlocated ]
           Offset }

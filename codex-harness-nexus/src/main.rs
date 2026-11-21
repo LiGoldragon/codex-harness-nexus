@@ -73,7 +73,7 @@ impl MemoryProcess {
         let row_count = self.remembered.row_count_option.clone()?;
         Some(Process::Watch(WatchProcess {
             flow_id: watch.flow_id.clone(),
-            session: watch.session.clone(),
+            session_id: watch.session_id.clone(),
             rollout: watch.rollout.clone(),
             offset: watch.offset.clone(),
             row_count,

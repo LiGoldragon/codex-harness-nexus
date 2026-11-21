@@ -1,9 +1,9 @@
 Signal
-[ harness:[ Session FilePath Tokens Response ]
+[ harness:[ SessionId FilePath Tokens Response ]
   codex_harness:[ Offset RowCount ]
   codex_harness:meta:[ ThreadDatabase ] ]
 [ Follow.{ FilePath Offset RowCount }
-  FindRollout.{ ThreadDatabase Session } ]
+  FindRollout.{ ThreadDatabase SessionId } ]
 [ Following.{ Vector<Row> Offset }
   RolloutFinding.[ Found.FilePath
                    Unfound ] ]

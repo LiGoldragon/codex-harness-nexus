@@ -20,7 +20,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use flow::FlowId;
-use harness::{Compaction, Event, Observable, Session};
+use harness::{Compaction, Event, Observable, SessionId};
 use process::{Giving, Processable};
 
 pub trait Identifiable {
@@ -32,7 +32,7 @@ pub trait Identifiable {
 /// a Codex flow from its random tail: six characters from the twenty-fourth of
 /// the id written without its dashes, as `flow-id codex` draws its first
 /// candidate.
-impl Identifiable for Session {
+impl Identifiable for SessionId {
     fn identify(&self) -> FlowId {
         let bare: String = self.0.chars().filter(|character| *character != '-').map(|character| character.to_ascii_lowercase()).collect();
         FlowId(bare.chars().skip(23).take(6).collect())
@@ -40,18 +40,18 @@ impl Identifiable for Session {
 }
 
 impl Hook {
-    fn session(&self) -> &Session {
+    fn session_id(&self) -> &SessionId {
         match self {
-            Hook::SessionStart(start) => &start.session,
-            Hook::PermissionRequest(session) | Hook::PostToolUse(session) => session,
-            Hook::PostCompact(compact) => &compact.session,
+            Hook::SessionStart(start) => &start.session_id,
+            Hook::PermissionRequest(session_id) | Hook::PostToolUse(session_id) => session_id,
+            Hook::PostCompact(compact) => &compact.session_id,
         }
     }
 }
 
 impl Identifiable for Hook {
     fn identify(&self) -> FlowId {
-        self.session().identify()
+        self.session_id().identify()
     }
 }
 
@@ -91,7 +91,7 @@ impl Processable for ReportProcess {
                 Some(file_path) => Rollout::Located(file_path.clone()),
                 None => Rollout::Unlocated,
             };
-            manager.give(Watch { flow_id: start.session.identify(), session: start.session.clone(), rollout, offset: Offset(0) });
+            manager.give(Watch { flow_id: start.session_id.identify(), session_id: start.session_id.clone(), rollout, offset: Offset(0) });
         }
         manager.give(Observe { flow_id: self.hook.identify(), event_vector: self.hook.events(), offset_option: None });
         None
@@ -131,7 +131,7 @@ impl Processable for WatchProcess {
                 None
             }
             (Rollout::Unlocated, Some(thread_database)) => {
-                manager.give(FindRollout { thread_database: thread_database.clone(), session: self.session.clone() });
+                manager.give(FindRollout { thread_database: thread_database.clone(), session_id: self.session_id.clone() });
                 None
             }
             (Rollout::Unlocated, None) => Some(Watching::Unlocated),
