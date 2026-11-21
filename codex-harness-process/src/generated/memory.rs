@@ -18,7 +18,6 @@ pub enum Rollout {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub struct Watch {
-    pub flow_id: flow::FlowId,
     pub session_id: harness::SessionId,
     pub rollout: Rollout,
     pub read_from: codex_harness::ReadFrom,
@@ -27,7 +26,7 @@ pub struct Watch {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub struct Locate {
-    pub flow_id: flow::FlowId,
+    pub session_id: harness::SessionId,
     pub file_path: harness::FilePath,
 }
 #[rustfmt::skip]
@@ -38,7 +37,7 @@ pub struct Keep(pub codex_harness::meta::Set);
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub struct Observe {
-    pub flow_id: flow::FlowId,
+    pub session_id: harness::SessionId,
     pub event_vector: alloc::vec::Vec<harness::Event>,
     pub offset_option: core::option::Option<codex_harness::Offset>,
 }

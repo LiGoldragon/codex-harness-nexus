@@ -19,39 +19,38 @@ pub enum Source {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub struct SessionStart_Data {
-    pub session_id: harness::SessionId,
     pub file_path_option: core::option::Option<harness::FilePath>,
     pub source: Source,
 }
 #[rustfmt::skip]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
-pub struct PostCompact_Data {
-    pub session_id: harness::SessionId,
-    pub trigger: harness::Trigger,
-}
-#[rustfmt::skip]
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub enum Hook {
     SessionStart(SessionStart_Data),
-    PermissionRequest(harness::SessionId),
-    PostToolUse(harness::SessionId),
-    PostCompact(PostCompact_Data),
+    PermissionRequest,
+    PostToolUse,
+    PostCompact(harness::Trigger),
 }
 #[rustfmt::skip]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub struct Changed {
-    pub flow_id: flow::FlowId,
+    pub session_id: harness::SessionId,
     pub event: harness::Event,
     pub state: harness::State,
 }
 #[rustfmt::skip]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct Report_Data {
+    pub session_id: harness::SessionId,
+    pub hook: Hook,
+}
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub enum Input {
-    Report(Hook),
+    Report(Report_Data),
     Subscribe,
     Listening,
 }
@@ -67,7 +66,7 @@ pub enum Output {
 #[rustfmt::skip]
 #[allow(clippy::result_large_err, clippy::ptr_arg, clippy::borrowed_box)]
 pub trait Answering {
-    fn report(&self, hook: &Hook) -> core::result::Result<(), Output>;
+    fn report(&self, report: &Report_Data) -> core::result::Result<(), Output>;
     fn subscribe(
         &self,
     ) -> core::result::Result<alloc::vec::Vec<harness::Observed>, Output>;

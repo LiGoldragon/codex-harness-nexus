@@ -28,8 +28,8 @@ fn report(mut hook_stream: UnixStream, place: &Place) {
     if hook_stream.read_to_string(&mut payload).is_err() {
         return;
     }
-    let hook = match Hook::translate(&payload) {
-        Ok(hook) => hook,
+    let report = match Report_Data::translate(&payload) {
+        Ok(report) => report,
         Err(untranslated) => {
             eprintln!("{untranslated:?}");
             return;
@@ -39,7 +39,7 @@ fn report(mut hook_stream: UnixStream, place: &Place) {
         eprintln!("NexusDown");
         return;
     };
-    if (Call { caller, input: Input::Report(hook) }).write_to(&mut nexus).is_ok() {
+    if (Call { caller, input: Input::Report(report) }).write_to(&mut nexus).is_ok() {
         let _ = Output::read_from(&mut nexus);
     }
 }

@@ -40,15 +40,14 @@ fn text(value: &Value, field: &'static str) -> Result<String, Untranslated> {
     value.get(field).and_then(Value::as_str).map(str::to_owned).ok_or(Untranslated::MissingField(field))
 }
 
-impl Translatable for Hook {
+impl Translatable for Report_Data {
     /// Codex's hook payload: its event's name, the thread's id, and for a
     /// session's start the rollout's path, which may be null.
-    fn translate(payload: &str) -> Result<Hook, Untranslated> {
+    fn translate(payload: &str) -> Result<Self, Untranslated> {
         let value: Value = serde_json::from_str(payload).map_err(|_| Untranslated::Unreadable)?;
-        let session_id = || text(&value, "session_id").map(SessionId);
-        Ok(match text(&value, "hook_event_name")?.as_str() {
+        let session_id = SessionId(text(&value, "session_id")?);
+        let hook = match text(&value, "hook_event_name")?.as_str() {
             "SessionStart" => Hook::SessionStart(SessionStart_Data {
-                session_id: session_id()?,
                 file_path_option: value.get("transcript_path").and_then(Value::as_str).filter(|path| !path.trim().is_empty()).map(|path| FilePath(path.to_owned())),
                 source: match text(&value, "source").ok().as_deref() {
                     Some("resume") => Source::Resume,
@@ -56,18 +55,16 @@ impl Translatable for Hook {
                     _ => Source::Startup,
                 },
             }),
-            "PermissionRequest" => Hook::PermissionRequest(session_id()?),
-            "PostToolUse" => Hook::PostToolUse(session_id()?),
-            "PostCompact" => Hook::PostCompact(PostCompact_Data {
-                session_id: session_id()?,
-                trigger: match text(&value, "trigger")?.as_str() {
+            "PermissionRequest" => Hook::PermissionRequest,
+            "PostToolUse" => Hook::PostToolUse,
+            "PostCompact" => Hook::PostCompact(match text(&value, "trigger")?.as_str() {
                     "manual" => Trigger::Manual,
                     "auto" => Trigger::Automatic,
                     other => return Err(Untranslated::UnknownEvent(format!("compaction trigger {other}"))),
-                },
             }),
             other => return Err(Untranslated::UnknownEvent(other.to_owned())),
-        })
+        };
+        Ok(Self { session_id, hook })
     }
 }
 

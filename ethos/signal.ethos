@@ -1,7 +1,6 @@
 Signal
-[ harness:[ SessionId FilePath Trigger Event State Observed ]
-  flow:[ FlowId ] ]
-[ Report.Hook
+[ harness:[ SessionId FilePath Trigger Event State Observed ] ]
+[ Report.{ SessionId Hook }
   Subscribe
   Listening ]
 [ Reported
@@ -11,8 +10,8 @@ Signal
 [ Source.[ Startup
            Resume
            Compact ]
-  Hook.[ SessionStart.{ SessionId Option<FilePath> Source }
-         PermissionRequest.SessionId
-         PostToolUse.SessionId
-         PostCompact.{ SessionId Trigger } ]
-  Changed.{ FlowId Event State } ]
+  Hook.[ SessionStart.{ Option<FilePath> Source }
+         PermissionRequest
+         PostToolUse
+         PostCompact.Trigger ]
+  Changed.{ SessionId Event State } ]

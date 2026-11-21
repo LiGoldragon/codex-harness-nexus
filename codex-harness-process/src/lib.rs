@@ -38,7 +38,7 @@ pub use library::*;
 pub use memory::*;
 pub use meta::{HookName, Set, ThreadDatabase};
 pub use processes::*;
-pub use signal::{Hook, Input, Output, PostCompact_Data, SessionStart_Data, Source};
+pub use signal::{Hook, Input, Output, Report_Data, SessionStart_Data, Source};
 
 /// A call on the Nexus's socket: its input, and who made it.
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -66,41 +66,8 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use flow::FlowId;
 use harness::{Compaction, Event, Observable, SessionId};
 use process::{Answer, Caller, Giving, Processable, Unremembered};
-
-pub trait Identifiable {
-    fn identify(&self) -> FlowId;
-}
-
-/// A Codex thread's id is a UUID of version 7, whose first characters are its
-/// moment and are shared by every thread begun within hours; the system names
-/// a Codex flow from its random tail: six characters from the twenty-fourth of
-/// the id written without its dashes, as `flow-id codex` draws its first
-/// candidate.
-impl Identifiable for SessionId {
-    fn identify(&self) -> FlowId {
-        let bare: String = self.0.chars().filter(|character| *character != '-').map(|character| character.to_ascii_lowercase()).collect();
-        FlowId(bare.chars().skip(23).take(6).collect())
-    }
-}
-
-impl Hook {
-    fn session_id(&self) -> &SessionId {
-        match self {
-            Hook::SessionStart(start) => &start.session_id,
-            Hook::PermissionRequest(session_id) | Hook::PostToolUse(session_id) => session_id,
-            Hook::PostCompact(compact) => &compact.session_id,
-        }
-    }
-}
-
-impl Identifiable for Hook {
-    fn identify(&self) -> FlowId {
-        self.session_id().identify()
-    }
-}
 
 impl Observable for Hook {
     fn events(&self) -> Vec<Event> {
@@ -111,9 +78,9 @@ impl Observable for Hook {
                 Source::Resume => vec![Event::Resumed],
                 Source::Compact => vec![],
             },
-            Hook::PermissionRequest(_) => vec![Event::PermissionAsked],
-            Hook::PostToolUse(_) => vec![Event::ToolUsed],
-            Hook::PostCompact(compact) => vec![Event::Compacted(Compaction { trigger: compact.trigger.clone(), tokens_option: None })],
+            Hook::PermissionRequest => vec![Event::PermissionAsked],
+            Hook::PostToolUse => vec![Event::ToolUsed],
+            Hook::PostCompact(trigger) => vec![Event::Compacted(Compaction { trigger: trigger.clone(), tokens_option: None })],
         }
     }
 }
@@ -148,9 +115,9 @@ impl Processable for ReportProcess {
                 Source::Startup => ReadFrom::Offset(Offset(0)),
                 Source::Resume | Source::Compact => ReadFrom::FileEnd,
             };
-            manager.give(Watch { flow_id: start.session_id.identify(), session_id: start.session_id.clone(), rollout, read_from });
+            manager.give(Watch { session_id: self.session_id.clone(), rollout, read_from });
         }
-        manager.give(Observe { flow_id: self.hook.identify(), event_vector: self.hook.events(), offset_option: None });
+        manager.give(Observe { session_id: self.session_id.clone(), event_vector: self.hook.events(), offset_option: None });
         None
     }
 
@@ -200,7 +167,7 @@ impl Processable for WatchProcess {
         match taken {
             WatchTaken::RolloutFinding(Ok(RolloutFinding_Data::Found(file_path))) => {
                 self.rollout = Rollout::Located(file_path.clone());
-                manager.give(Locate { flow_id: self.flow_id.clone(), file_path: file_path.clone() });
+                manager.give(Locate { session_id: self.session_id.clone(), file_path: file_path.clone() });
                 self.follow(&file_path, &mut manager);
                 None
             }
@@ -211,7 +178,7 @@ impl Processable for WatchProcess {
             WatchTaken::Following(Ok(following)) => {
                 self.read_from = ReadFrom::Offset(following.offset);
                 let event_vector = following.row_vector.iter().flat_map(Observable::events).collect();
-                manager.give(Observe { flow_id: self.flow_id.clone(), event_vector, offset_option: Some(following.offset) });
+                manager.give(Observe { session_id: self.session_id.clone(), event_vector, offset_option: Some(following.offset) });
                 None
             }
             WatchTaken::Following(Err(_)) => Some(Watching::Unfollowed),

@@ -50,6 +50,7 @@ pub struct Configured(pub codex_harness::meta::Set);
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub struct ReportProcess {
     pub caller: process::Caller,
+    pub session_id: harness::SessionId,
     pub hook: codex_harness::signal::Hook,
 }
 #[rustfmt::skip]
@@ -65,7 +66,6 @@ pub enum ReportTaken {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub struct WatchProcess {
-    pub flow_id: flow::FlowId,
     pub session_id: harness::SessionId,
     pub rollout: codex_harness::memory::Rollout,
     pub read_from: codex_harness::ReadFrom,
