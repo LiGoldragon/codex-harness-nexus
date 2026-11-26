@@ -1,0 +1,11 @@
+Signal
+[]
+[ Configure.Set
+  ObserveStartingServer ]
+[ Configured.Set
+  StartingServerObserved.Option<ServerAddress>
+  Refused.Refusal ]
+[ ServerAddress.String
+  Set.[ StartingServer.ServerAddress
+        NoStartingServer ]
+  Refusal.[ InvalidRequest InvalidServerAddress UnreadableMemory Uncommitted ] ]

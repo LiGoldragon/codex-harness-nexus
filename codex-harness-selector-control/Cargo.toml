@@ -1,0 +1,20 @@
+[package]
+name = "codex-harness-selector-control"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[features]
+default = ["datom"]
+datom = []
+
+[dependencies]
+transport = { path = "../transport" }
+datom-codec.workspace = true
+protos.workspace = true
+rkyv.workspace = true
+rustix.workspace = true
+
+[lints.rust]
+unsafe_code = "forbid"
