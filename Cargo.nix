@@ -63,6 +63,16 @@ rec {
       # File a bug if you depend on any for non-debug work!
       debug = internal.debugCrate { inherit packageId; };
     };
+    "codex-harness-selector-control" = rec {
+      packageId = "codex-harness-selector-control";
+      build = internal.buildRustCrateWithFeatures {
+        packageId = "codex-harness-selector-control";
+      };
+
+      # Debug support which might change between releases.
+      # File a bug if you depend on any for non-debug work!
+      debug = internal.debugCrate { inherit packageId; };
+    };
     "codex-harness-translator" = rec {
       packageId = "codex-harness-translator";
       build = internal.buildRustCrateWithFeatures {
@@ -341,6 +351,48 @@ rec {
         ];
         features = {
           "datom" = [ "dep:datom-codec" "process/datom" "harness/datom" "flow/datom" ];
+        };
+        resolvedDefaultFeatures = [ "datom" "default" ];
+      };
+      "codex-harness-selector-control" = rec {
+        crateName = "codex-harness-selector-control";
+        version = "0.1.0";
+        edition = "2024";
+        crateBin = [
+          {
+            name = "codex-harness-selector-control";
+            path = "src/main.rs";
+            requiredFeatures = [ ];
+          }
+        ];
+        src = lib.cleanSourceWith { filter = sourceFilter;  src = ./codex-harness-selector-control; };
+        dependencies = [
+          {
+            name = "datom-codec";
+            packageId = "datom-codec";
+          }
+          {
+            name = "protos";
+            packageId = "protos";
+          }
+          {
+            name = "rkyv";
+            packageId = "rkyv";
+            usesDefaultFeatures = false;
+            features = [ "alloc" "bytecheck" "little_endian" "pointer_width_32" "unaligned" ];
+          }
+          {
+            name = "rustix";
+            packageId = "rustix";
+            features = [ "net" "fs" "event" ];
+          }
+          {
+            name = "transport";
+            packageId = "transport";
+          }
+        ];
+        features = {
+          "default" = [ "datom" ];
         };
         resolvedDefaultFeatures = [ "datom" "default" ];
       };
