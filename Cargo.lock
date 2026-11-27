@@ -208,11 +208,9 @@ dependencies = [
 
 [[package]]
 name = "harness-nexus-library"
-version = "0.3.0"
-source = "git+https://github.com/LiGoldragon/harness-nexus-library?rev=ae7e008#ae7e008700972b7f033de6ba94c36e6c49fc93f8"
+version = "0.4.0"
 dependencies = [
  "datom-codec",
- "flow-ethos",
  "protos",
  "rkyv",
 ]
@@ -356,8 +354,8 @@ dependencies = [
 
 [[package]]
 name = "process-library"
-version = "0.2.0"
-source = "git+https://github.com/LiGoldragon/process-library?rev=63bca61d040830d2c409c91a3a93a4bd934c75ff#63bca61d040830d2c409c91a3a93a4bd934c75ff"
+version = "0.3.0"
+source = "git+https://github.com/LiGoldragon/process-library?rev=36054367393838014149fd7a9200f9bf88ee7ed1#36054367393838014149fd7a9200f9bf88ee7ed1"
 dependencies = [
  "datom-codec",
  "rkyv",

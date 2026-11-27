@@ -103,7 +103,7 @@ impl Processable for ReportProcess {
     type Gift = Gift;
     type Outcome = Reporting;
 
-    fn begin<N: Giving<Gift>>(&mut self, mut manager: N) -> Option<Reporting> {
+    fn begin<N: Giving<Self>>(&mut self, mut manager: N) -> Option<Reporting> {
         manager.give(Reported {});
         if let Hook::SessionStart(start) = &self.hook {
             let rollout = match &start.file_path_option {
@@ -121,14 +121,14 @@ impl Processable for ReportProcess {
         None
     }
 
-    fn take<N: Giving<Gift>>(&mut self, taken: ReportTaken, mut manager: N) -> Option<Reporting> {
+    fn take<N: Giving<Self>>(&mut self, taken: ReportTaken, mut manager: N) -> Option<Reporting> {
         match taken {
             ReportTaken::Answer(Answer::Succeeded) => None,
             ReportTaken::Answer(Answer::Failed) => Some(Reporting::Unremembered),
             ReportTaken::Observation(Err(Unremembered {})) => Some(Reporting::Unremembered),
             ReportTaken::Observation(Ok(observation)) => {
                 for changed in observation.0 {
-                    manager.give(Changed(changed))
+                    manager.give(changed)
                 }
                 Some(Reporting::Observed)
             }
@@ -137,7 +137,7 @@ impl Processable for ReportProcess {
 }
 
 impl WatchProcess {
-    fn follow<N: Giving<Gift>>(&self, file_path: &harness::FilePath, manager: &mut N) {
+    fn follow<N: Giving<Self>>(&self, file_path: &harness::FilePath, manager: &mut N) {
         manager.give(Follow_Data { file_path: file_path.clone(), read_from: self.read_from.clone(), row_count: self.row_count });
     }
 }
@@ -149,7 +149,7 @@ impl Processable for WatchProcess {
 
     /// A located rollout is followed; an unlocated one is first asked of
     /// Codex's own record of its threads.
-    fn begin<N: Giving<Gift>>(&mut self, mut manager: N) -> Option<Watching> {
+    fn begin<N: Giving<Self>>(&mut self, mut manager: N) -> Option<Watching> {
         match (&self.rollout, &self.thread_database_option) {
             (Rollout::Located(file_path), _) => {
                 self.follow(file_path, &mut manager);
@@ -163,7 +163,7 @@ impl Processable for WatchProcess {
         }
     }
 
-    fn take<N: Giving<Gift>>(&mut self, taken: WatchTaken, mut manager: N) -> Option<Watching> {
+    fn take<N: Giving<Self>>(&mut self, taken: WatchTaken, mut manager: N) -> Option<Watching> {
         match taken {
             WatchTaken::RolloutFinding(Ok(RolloutFinding_Data::Found(file_path))) => {
                 self.rollout = Rollout::Located(file_path.clone());
@@ -186,7 +186,7 @@ impl Processable for WatchProcess {
             WatchTaken::Observation(Err(Unremembered {})) => None,
             WatchTaken::Observation(Ok(observation)) => {
                 for changed in observation.0 {
-                    manager.give(Changed(changed))
+                    manager.give(changed)
                 }
                 None
             }
@@ -200,13 +200,13 @@ impl Processable for SubscribeProcess {
     /// It ends one way, when its connection closes, and so declares no outcome.
     type Outcome = ();
 
-    fn begin<N: Giving<Gift>>(&mut self, mut manager: N) -> Option<()> {
+    fn begin<N: Giving<Self>>(&mut self, mut manager: N) -> Option<()> {
         manager.give(Recall {});
         None
     }
 
     /// It answers with every session as it is now, then rests while its connection is open.
-    fn take<N: Giving<Gift>>(&mut self, taken: SubscribeTaken, mut manager: N) -> Option<()> {
+    fn take<N: Giving<Self>>(&mut self, taken: SubscribeTaken, mut manager: N) -> Option<()> {
         if let Ok(recollection) = taken {
             manager.give(Subscribed(recollection.0));
         }
@@ -219,12 +219,12 @@ impl Processable for ConfigureProcess {
     type Gift = Gift;
     type Outcome = Configuring;
 
-    fn begin<N: Giving<Gift>>(&mut self, mut manager: N) -> Option<Configuring> {
+    fn begin<N: Giving<Self>>(&mut self, mut manager: N) -> Option<Configuring> {
         manager.give(Keep(self.set.clone()));
         None
     }
 
-    fn take<N: Giving<Gift>>(&mut self, taken: ConfigureTaken, mut manager: N) -> Option<Configuring> {
+    fn take<N: Giving<Self>>(&mut self, taken: ConfigureTaken, mut manager: N) -> Option<Configuring> {
         match taken {
             Answer::Succeeded => {
                 manager.give(Configured(self.set.clone()));

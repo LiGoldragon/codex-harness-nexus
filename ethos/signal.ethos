@@ -6,12 +6,11 @@ Signal
 [ Reported
   Subscribed.Vector<Observed>
   Acknowledged
-  Changed ]
+  Changed.{ SessionId Event State } ]
 [ Source.[ Startup
            Resume
            Compact ]
   Hook.[ SessionStart.{ Option<FilePath> Source }
          PermissionRequest
          PostToolUse
-         PostCompact.Trigger ]
-  Changed.{ SessionId Event State } ]
+         PostCompact.Trigger ] ]
