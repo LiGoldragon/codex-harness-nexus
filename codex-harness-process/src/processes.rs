@@ -1,5 +1,8 @@
-//! The generated process root held here with signal-harness's `Changed` as a
-//! local record: ethos-zero resolves no imported names across crates.
+//! The Process root is held by hand because ethos-zero 31.1.1 refuses
+//! `process.ethos` as `Foreign.Changed`: its `Changed` is imported from
+//! signal-harness, and ethos-zero resolves no imported names across crates.
+//! This one internal `Changed` is the Memory and Process record; its `From`
+//! conversion to the wire type is applied once at subscription publish.
 #![allow(
     dead_code,
     non_camel_case_types,
@@ -17,6 +20,16 @@ pub struct Changed {
     pub flow_id: flow::FlowId,
     pub event: harness::Event,
     pub state: harness::State,
+}
+
+impl From<Changed> for signal_harness::Changed {
+    fn from(changed: Changed) -> signal_harness::Changed {
+        signal_harness::Changed {
+            flow_id: changed.flow_id,
+            event: changed.event,
+            state: changed.state,
+        }
+    }
 }
 #[rustfmt::skip]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]

@@ -44,33 +44,19 @@ pub enum Hook {
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub enum Input {
     Report(Hook),
-    Subscribe,
     Listening,
-}
-#[rustfmt::skip]
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
-pub struct Changed_Data {
-    pub flow_id: flow::FlowId,
-    pub event: harness::Event,
-    pub state: harness::State,
 }
 #[rustfmt::skip]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub enum Output {
     Reported,
-    Subscribed(alloc::vec::Vec<harness::Observed>),
     Acknowledged,
-    Changed(Changed_Data),
 }
 #[rustfmt::skip]
 #[allow(clippy::result_large_err, clippy::ptr_arg, clippy::borrowed_box)]
 pub trait Answering {
     fn report(&self, hook: &Hook) -> core::result::Result<(), Output>;
-    fn subscribe(
-        &self,
-    ) -> core::result::Result<alloc::vec::Vec<harness::Observed>, Output>;
     fn listening(&self) -> core::result::Result<(), Output>;
 }
 #[rustfmt::skip]
@@ -87,9 +73,6 @@ impl Answerable for Input {
                 nexus
                     .report(carried)
                     .map_or_else(|refusal| refusal, |()| Output::Reported)
-            }
-            Input::Subscribe => {
-                nexus.subscribe().map_or_else(|refusal| refusal, Output::Subscribed)
             }
             Input::Listening => {
                 nexus

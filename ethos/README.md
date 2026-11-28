@@ -24,7 +24,8 @@ ethos-zero 'Generate.{ [ «ethos/signal.ethos» «ethos/meta.ethos» «ethos/emi
   What returns for a record is the process library's Answer; for a change, its answer or
   Unremembered.
 - process.ethos is the Process root: Report, Watch, Subscribe and Configure. It imports
-  Subscribe, Subscribed and Changed from signal-harness. Ethos-zero does not resolve imports
-  across crates, so process.ethos is kept as the semantic source but is not generated; its
-  process-module output lives in codex-harness-process/src/processes.rs, where the internal
-  Changed record is held. memory.ethos imports that record from `codex_harness:processes`.
+  Subscribe, Subscribed and Changed from signal-harness. Ethos-zero 31.1.1 refuses this root
+  as `Foreign.Changed`, so it is kept as the semantic source but not generated. The
+  hand-written `codex-harness-process/src/processes.rs` holds the one internal `Changed`
+  record used by Memory; `From<Changed>` converts it once to `signal_harness::Changed` at
+  the publish boundary. memory.ethos imports the internal record from `codex_harness:processes`.
