@@ -30,3 +30,5 @@ Codex writes `<root>/YYYY/MM/DD/rollout-….jsonl`. Each is watched from its fir
 there before the discovery begins is reported only when a live process holds it open for
 writing, as Codex holds each session it runs; a closed one is history and is not read again. A
 session named by its SessionStart and discovered is one Watch, with the offset read so far.
+With a rollout root configured and no RowCount, a Watch reads at most 256 rows at a time, the
+count above; a RowCount configured is the one each Watch born after it takes.

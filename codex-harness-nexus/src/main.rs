@@ -45,6 +45,21 @@ struct Records {
     rollout_root_option: Option<FilePath>,
 }
 
+impl Records {
+    /// The row count a Watch is born with when a rollout root is configured
+    /// and no row count is: the one the README configures, so a session
+    /// discovered with no hook and no other configuration is still read.
+    const DISCOVERED_ROW_COUNT: RowCount = RowCount(256);
+
+    /// The row count a Watch is born with: the one configured, else the
+    /// discovery's own once a rollout root is configured. It is derived, not
+    /// kept: each Watch born after a row count is configured takes that one,
+    /// and with neither configured a Watch waits for its row count.
+    fn row_count(&self) -> Option<RowCount> {
+        self.row_count_option.or_else(|| self.rollout_root_option.as_ref().map(|_| Records::DISCOVERED_ROW_COUNT))
+    }
+}
+
 /// The memory process: one change at a time, each kept before it is answered.
 struct MemoryProcess {
     records: Records,
@@ -80,10 +95,11 @@ impl MemoryProcess {
         self.records.watch_vector.iter().any(|watch| watch.flow_id == *flow_id && watch.rollout == Rollout::Unlocated)
     }
 
-    /// A Watch's process, when the row count it is born with is configured;
-    /// the thread database is moved in with it, as it is configured.
+    /// A Watch's process, when the row count it is born with is configured
+    /// or a rollout root is; the thread database is moved in with it, as it
+    /// is configured.
     fn process_of(&self, watch: &Watch) -> Option<Process> {
-        let row_count = self.records.row_count_option?;
+        let row_count = self.records.row_count()?;
         Some(Process::Watch(WatchProcess {
             flow_id: watch.flow_id.clone(),
             session_id: watch.session_id.clone(),
@@ -426,8 +442,8 @@ impl World {
     }
 
     /// Every Watch kept and without a living process is given its process, once
-    /// its row count is configured: at the program's start, when the translator
-    /// begins to listen, and when a Watch or the configuration is kept.
+    /// its row count is known (Records::row_count): at the program's start, when
+    /// the translator begins to listen, and when a Watch or the configuration is kept.
     fn bear_watches(&mut self) {
         let unborn: Vec<Process> = self
             .memory
@@ -606,4 +622,33 @@ fn main() -> ExitCode {
 fn now() -> Moment {
     let since = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
     Moment(i64::try_from(since.as_nanos()).unwrap_or(i64::MAX))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn records(row_count_option: Option<RowCount>, rollout_root_option: Option<FilePath>) -> Records {
+        Records { observed_vector: Vec::new(), watch_vector: Vec::new(), row_count_option, thread_database_option: None, hook_name_vector: Vec::new(), rollout_root_option }
+    }
+
+    fn root() -> Option<FilePath> {
+        Some(FilePath("/home/example/.codex/sessions".into()))
+    }
+
+    #[test]
+    fn a_watch_waits_for_its_row_count_with_no_rollout_root() {
+        assert_eq!(records(None, None).row_count(), None);
+    }
+
+    #[test]
+    fn a_rollout_root_alone_gives_the_discovery_row_count() {
+        assert_eq!(records(None, root()).row_count(), Some(RowCount(256)));
+    }
+
+    #[test]
+    fn a_configured_row_count_is_kept_with_or_without_a_rollout_root() {
+        assert_eq!(records(Some(RowCount(64)), None).row_count(), Some(RowCount(64)));
+        assert_eq!(records(Some(RowCount(64)), root()).row_count(), Some(RowCount(64)));
+    }
 }
