@@ -1,6 +1,6 @@
-//! The Process root is held by hand because ethos-zero 31.1.1 refuses
-//! `process.ethos` as `Foreign.Changed`: its `Changed` is imported from
-//! signal-harness, and ethos-zero resolves no imported names across crates.
+//! The Process root is held by hand because ethos-zero does not resolve its
+//! cross-root imports. In this pinned Codex tree, the first refusal is
+//! `Foreign.Report`; the Claude witness first refuses `Foreign.Changed`.
 //! This one internal `Changed` is the Memory and Process record; its `From`
 //! conversion to the wire type is applied once at subscription publish.
 #![allow(
