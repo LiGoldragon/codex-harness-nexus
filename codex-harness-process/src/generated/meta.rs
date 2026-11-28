@@ -23,6 +23,7 @@ pub enum Set {
     RemoveHook(HookName),
     RowCount(codex_harness::RowCount),
     ThreadDatabase(ThreadDatabase),
+    RolloutRoot(harness::FilePath),
 }
 #[rustfmt::skip]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]

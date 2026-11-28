@@ -12,9 +12,11 @@ ethos-zero 'Generate.{ [ «ethos/signal.ethos» «ethos/meta.ethos» «ethos/emi
 - signal.ethos is the Nexus's own contract with its translator: Report is answered by Reported,
   and Listening, the library's input every Nexus has (its translator tells it that it has begun
   to listen), by Acknowledged. Subscriptions are served separately by signal-harness.
-- meta.ethos is the meta contract: Configure, answered by Configured.
-- emission.ethos is the Emission root: Follow a rollout, and FindRollout in Codex's own record
-  of its threads, the ThreadDatabase set on the meta surface.
+- meta.ethos is the meta contract: Configure, answered by Configured. RolloutRoot is the
+  directory Codex keeps its sessions' rollouts in, set as `Configure.RolloutRoot./abs/path`.
+- emission.ethos is the Emission root: Follow a rollout, FindRollout in Codex's own record
+  of its threads, the ThreadDatabase set on the meta surface, and Discover the rollouts under
+  the RolloutRoot. Discover is lasting, as Follow is: a Discovered for each session's rollout.
 - library.ethos holds what the roots share: Offset, ReadFrom and RowCount.
 - memory.ethos has the Memory's five sections. Its records: Watch, which keeps its SessionId
   and its Rollout, Located or Unlocated, since a session's start may name no rollout;
@@ -23,7 +25,7 @@ ethos-zero 'Generate.{ [ «ethos/signal.ethos» «ethos/meta.ethos» «ethos/emi
   Its changes, Observe and Recall, are answered by Observation and Recollection, by place.
   What returns for a record is the process library's Answer; for a change, its answer or
   Unremembered.
-- process.ethos is the Process root: Report, Watch, Subscribe and Configure. It imports
+- process.ethos is the Process root: Report, Watch, Subscribe, Configure and Discover. It imports
   Subscribe, Subscribed and Changed from signal-harness. Ethos-zero 31.1.1 does not resolve
   its cross-root imports: this pinned Codex tree's first refusal is `Foreign.Report`, while
   the Claude witness first refuses `Foreign.Changed`. So process.ethos stays the semantic
@@ -31,3 +33,7 @@ ethos-zero 'Generate.{ [ «ethos/signal.ethos» «ethos/meta.ethos» «ethos/emi
   holds the one internal `Changed` record used by Memory; `From<Changed>` converts it once
   to `signal_harness::Changed` at the publish boundary. memory.ethos imports that record
   from `codex_harness:processes`.
+  Discover is born of no call, record or process given (the Claude witness's ethos-zero refuses
+  that as `Unborn.Discover`; here `Foreign.Report` is refused first); it is written in processes.rs as ethos-zero writes a process born of a
+  record of the Memory holding its configured values, owned by the Memory, and the World bears
+  it where a rollout root is configured, ending it Forgotten when the root is replaced.

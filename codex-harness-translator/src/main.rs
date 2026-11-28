@@ -10,7 +10,7 @@ use std::thread;
 
 use codex_harness_process::*;
 use process::Caller;
-use codex_harness_translator::{CodexHarness, Translatable, caller, find, follow, itself};
+use codex_harness_translator::{CodexHarness, Translatable, caller, discover, find, follow, itself};
 use datom_codec::Datomizable;
 use protos::{Protosizable, Textualizable};
 use rustix::event::{PollFd, PollFlags};
@@ -140,6 +140,9 @@ fn main() -> ExitCode {
                     }
                     Ok(Some(Emission::FindRollout(emission))) => {
                         let _ = find(&emission).write_to(&mut stream);
+                    }
+                    Ok(Some(Emission::Discover(emission))) => {
+                        let _ = discover(stream, emission);
                     }
                     _ => {}
                 }

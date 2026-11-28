@@ -3,10 +3,12 @@ Emission
   codex_harness:[ Offset ReadFrom RowCount ]
   codex_harness:meta:[ ThreadDatabase ] ]
 [ Follow.{ FilePath ReadFrom RowCount }
-  FindRollout.{ ThreadDatabase SessionId } ]
+  FindRollout.{ ThreadDatabase SessionId }
+  Discover.{ FilePath } ]
 [ Following.{ Vector<Row> Offset }
   RolloutFinding.[ Found.FilePath
-                   Unfound ] ]
+                   Unfound ]
+  Discovered.{ SessionId FilePath } ]
 [ Row.[ TaskStarted
         TokenCount.Option<Tokens>
         TaskComplete.Option<Response>

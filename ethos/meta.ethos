@@ -1,5 +1,6 @@
 Signal
-[ codex_harness:[ RowCount ] ]
+[ harness:[ FilePath ]
+  codex_harness:[ RowCount ] ]
 [ Configure.Set ]
 [ Configured.Set ]
 [ HookName.String
@@ -7,4 +8,5 @@ Signal
   Set.[ Hooks.Vector<HookName>
         RemoveHook.HookName
         RowCount
-        ThreadDatabase ] ]
+        ThreadDatabase
+        RolloutRoot.FilePath ] ]

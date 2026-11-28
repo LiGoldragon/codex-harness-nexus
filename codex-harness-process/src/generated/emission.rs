@@ -35,9 +35,16 @@ pub struct FindRollout_Data {
 #[rustfmt::skip]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct Discover_Data {
+    pub file_path: harness::FilePath,
+}
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub enum Emission {
     Follow(Follow_Data),
     FindRollout(FindRollout_Data),
+    Discover(Discover_Data),
 }
 #[rustfmt::skip]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
@@ -56,9 +63,17 @@ pub enum RolloutFinding_Data {
 #[rustfmt::skip]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct Discovered_Data {
+    pub session_id: harness::SessionId,
+    pub file_path: harness::FilePath,
+}
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
 pub enum Outcome {
     Following(Following_Data),
     RolloutFinding(RolloutFinding_Data),
+    Discovered(Discovered_Data),
 }
 #[rustfmt::skip]
 pub trait Emitted {
@@ -75,4 +90,8 @@ impl Emitted for Follow_Data {
 #[rustfmt::skip]
 impl Emitted for FindRollout_Data {
     type Outcome = RolloutFinding_Data;
+}
+#[rustfmt::skip]
+impl Emitted for Discover_Data {
+    type Outcome = Discovered_Data;
 }

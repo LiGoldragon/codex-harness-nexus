@@ -36,7 +36,7 @@ pub mod memory;
 #[path = "processes.rs"]
 pub mod processes;
 
-pub use emission::{Emission, FindRollout_Data, Follow_Data, Following_Data, RolloutFinding_Data, Row};
+pub use emission::{Discover_Data, Discovered_Data, Emission, FindRollout_Data, Follow_Data, Following_Data, RolloutFinding_Data, Row};
 pub use library::*;
 pub use memory::*;
 pub use meta::{HookName, Set, ThreadDatabase};
@@ -267,6 +267,38 @@ impl Processable for ConfigureProcess {
                 Some(Configuring::Configured)
             }
             Answer::Failed => Some(Configuring::Unremembered),
+        }
+    }
+}
+
+/// A rollout that appears under the root configured, or that a live process
+/// holds when the discovery begins, is a session's: it is watched from its
+/// first row, since what it holds is all the session has written. A Watch the
+/// session's start has already given is kept as it is, with its offset. It goes
+/// on while the translator discovers; an emission that fails ends it Undiscovered.
+impl Processable for DiscoverProcess {
+    type Taken = DiscoverTaken;
+    type Gift = Gift;
+    type Outcome = Discovering;
+
+    fn begin<N: Giving<Gift>>(&mut self, mut manager: N) -> Option<Discovering> {
+        manager.give(Discover_Data { file_path: self.file_path.clone() });
+        None
+    }
+
+    fn take<N: Giving<Gift>>(&mut self, taken: DiscoverTaken, mut manager: N) -> Option<Discovering> {
+        match taken {
+            DiscoverTaken::Discovered(Ok(discovered)) => {
+                manager.give(Watch {
+                    flow_id: discovered.session_id.identify(),
+                    session_id: discovered.session_id,
+                    rollout: Rollout::Located(discovered.file_path),
+                    read_from: ReadFrom::Offset(Offset(0)),
+                });
+                None
+            }
+            DiscoverTaken::Discovered(Err(_)) => Some(Discovering::Undiscovered),
+            DiscoverTaken::Answer(_) => None,
         }
     }
 }

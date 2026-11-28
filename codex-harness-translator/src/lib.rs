@@ -1,13 +1,17 @@
 //! The Codex Harness Nexus's translator: the one place that holds Codex's
 //! words. It reads a hook's payload into a Hook, follows a rollout for its
-//! Nexus, reading each new row, and finds a rollout in Codex's own record of
-//! its threads.
+//! Nexus, reading each new row, finds a rollout in Codex's own record of
+//! its threads, and discovers each session's rollout under Codex's root.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Seek, SeekFrom};
 use std::io::Write;
+use std::mem::MaybeUninit;
 use std::net::Shutdown;
+use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use codex_harness_process::*;
@@ -104,42 +108,70 @@ fn rows_after(path: &str, offset: &Offset, row_count: &RowCount) -> io::Result<F
     Ok(rows)
 }
 
+/// A path watched once it exists. Until then its nearest existing ancestor is
+/// watched for what appears in it, and each time something does the path is
+/// tried again.
+struct Appearing {
+    path: PathBuf,
+    ancestor: Option<(PathBuf, i32)>,
+}
+
+impl Appearing {
+    fn new(path: PathBuf) -> Appearing {
+        Appearing { path, ancestor: None }
+    }
+
+    /// The path's watch once it exists, None while it is waited for. A path
+    /// with no ancestor at all is NotFound.
+    fn watch(&mut self, watching: &OwnedFd, flags: inotify::WatchFlags) -> io::Result<Option<i32>> {
+        loop {
+            if let Ok(watch) = inotify::add_watch(watching, &self.path, flags) {
+                if let Some((_, ancestor)) = self.ancestor.take() {
+                    inotify::remove_watch(watching, ancestor)?;
+                }
+                return Ok(Some(watch));
+            }
+            let Some(nearest) = self.path.ancestors().skip(1).find(|ancestor| ancestor.is_dir()).map(Path::to_owned) else {
+                return Err(io::Error::new(io::ErrorKind::NotFound, "no ancestor of the path exists"));
+            };
+            if self.ancestor.as_ref().is_some_and(|(directory, _)| *directory == nearest) {
+                return Ok(None);
+            }
+            if let Some((_, ancestor)) = self.ancestor.take() {
+                inotify::remove_watch(watching, ancestor)?;
+            }
+            let ancestor = inotify::add_watch(watching, &nearest, inotify::WatchFlags::CREATE | inotify::WatchFlags::MOVED_TO)?;
+            self.ancestor = Some((nearest, ancestor));
+        }
+    }
+}
+
+/// Waits for what the watches report or for the Nexus to close the connection,
+/// true when it has closed.
+fn closed(watching: &OwnedFd, stream: &UnixStream) -> io::Result<bool> {
+    let mut waiting = [PollFd::new(watching, PollFlags::IN), PollFd::new(stream, PollFlags::IN)];
+    rustix::event::poll(&mut waiting, None)?;
+    Ok(!waiting[1].revents().is_empty())
+}
+
 /// A lasting emission: an outcome each time the rollout grows, until the
 /// Nexus closes the connection. A rollout not yet written is waited for:
 /// its nearest existing ancestor is watched until each missing part appears.
 /// A path with no ancestor at all ends the connection, and the emission is Unanswered.
 pub fn follow(mut stream: UnixStream, follow: Follow_Data) -> io::Result<()> {
-    let path = std::path::PathBuf::from(&follow.file_path.0);
     let watching = inotify::init(inotify::CreateFlags::CLOEXEC)?;
-    let mut appearing: Option<(std::path::PathBuf, i32)> = None;
+    let mut appearing = Appearing::new(PathBuf::from(&follow.file_path.0));
     let mut followed = false;
     let mut read_from = follow.read_from.clone();
     let mut events = [0u8; 4096];
     loop {
-        while !followed {
-            if inotify::add_watch(&watching, &path, inotify::WatchFlags::MODIFY).is_ok() {
-                followed = true;
-                if let Some((_, watch)) = appearing.take() {
-                    inotify::remove_watch(&watching, watch)?;
-                }
-                break;
-            }
-            let Some(nearest) = path.ancestors().skip(1).find(|ancestor| ancestor.is_dir()).map(std::path::Path::to_owned) else {
-                return Err(io::Error::new(io::ErrorKind::NotFound, "no ancestor of the rollout exists"));
-            };
-            if appearing.as_ref().is_some_and(|(directory, _)| *directory == nearest) {
-                break;
-            }
-            if let Some((_, watch)) = appearing.take() {
-                inotify::remove_watch(&watching, watch)?;
-            }
-            let watch = inotify::add_watch(&watching, &nearest, inotify::WatchFlags::CREATE | inotify::WatchFlags::MOVED_TO)?;
-            appearing = Some((nearest, watch));
+        if !followed {
+            followed = appearing.watch(&watching, inotify::WatchFlags::MODIFY)?.is_some();
         }
         if followed {
             let offset = match &read_from {
                 ReadFrom::Offset(offset) => *offset,
-                ReadFrom::FileEnd => Offset(std::fs::metadata(&path)?.len().try_into().unwrap_or(i64::MAX)),
+                ReadFrom::FileEnd => Offset(std::fs::metadata(&appearing.path)?.len().try_into().unwrap_or(i64::MAX)),
             };
             let rows = rows_after(&follow.file_path.0, &offset, &follow.row_count)?;
             read_from = ReadFrom::Offset(rows.offset);
@@ -151,12 +183,189 @@ pub fn follow(mut stream: UnixStream, follow: Follow_Data) -> io::Result<()> {
                 continue;
             }
         }
-        let mut waiting = [PollFd::new(&watching, PollFlags::IN), PollFd::new(&stream, PollFlags::IN)];
-        rustix::event::poll(&mut waiting, None)?;
-        if !waiting[1].revents().is_empty() {
+        if closed(&watching, &stream)? {
             return Ok(());
         }
         rustix::io::read(&watching, &mut events)?;
+    }
+}
+
+/// A session's rollout, as Codex writes it: a file named `rollout-`, its
+/// moment, then the thread's id, a canonical lowercase UUID, then `.jsonl`.
+/// The id is the session's, as its hooks and its first row, session_meta, name it.
+pub fn rollout_session(path: &Path) -> Option<SessionId> {
+    let name = path.file_name()?.to_str()?;
+    let stem = name.strip_prefix("rollout-")?.strip_suffix(".jsonl")?;
+    let id = stem.get(stem.len().checked_sub(36)?..)?;
+    let moment = &stem[..stem.len() - 36];
+    let canonical = id.char_indices().all(|(position, character)| match position {
+        8 | 13 | 18 | 23 => character == '-',
+        _ => matches!(character, '0'..='9' | 'a'..='f'),
+    });
+    (canonical && moment.len() > 1 && moment.ends_with('-')).then(|| SessionId(id.to_owned()))
+}
+
+/// The rollouts a live process holds open for writing, as Codex holds the
+/// rollout of each session it is running: every file descriptor of every
+/// process this user may read. A file only read, or no longer written, is no
+/// live session's.
+fn held_rollouts() -> Vec<PathBuf> {
+    let Ok(processes) = std::fs::read_dir("/proc") else { return Vec::new() };
+    let mut held = Vec::new();
+    for process in processes.flatten() {
+        if !process.file_name().to_str().is_some_and(|name| name.bytes().all(|byte| byte.is_ascii_digit())) {
+            continue;
+        }
+        let Ok(descriptors) = std::fs::read_dir(process.path().join("fd")) else { continue };
+        for descriptor in descriptors.flatten() {
+            let Ok(target) = std::fs::read_link(descriptor.path()) else { continue };
+            if rollout_session(&target).is_none() {
+                continue;
+            }
+            let information = std::fs::read_to_string(process.path().join("fdinfo").join(descriptor.file_name())).unwrap_or_default();
+            let written = information
+                .lines()
+                .find_map(|line| line.strip_prefix("flags:"))
+                .and_then(|flags| u32::from_str_radix(flags.trim(), 8).ok())
+                .is_some_and(|flags| flags & 0o3 != 0);
+            if written {
+                held.push(target);
+            }
+        }
+    }
+    held
+}
+
+/// What one discovery holds: the root, waited for until it exists; each
+/// directory under it, by its watch; and each rollout reported.
+struct Discovery {
+    stream: UnixStream,
+    watching: OwnedFd,
+    root: Appearing,
+    directories: BTreeMap<i32, PathBuf>,
+    reported: BTreeSet<PathBuf>,
+}
+
+impl Discovery {
+    /// The root is watched for what is created or moved into it.
+    const ROOTED: inotify::WatchFlags = inotify::WatchFlags::CREATE.union(inotify::WatchFlags::MOVED_TO).union(inotify::WatchFlags::ONLYDIR);
+    /// A directory under it is too, and never through a link: what is outside
+    /// the root is no session of it.
+    const WATCHED: inotify::WatchFlags = Discovery::ROOTED.union(inotify::WatchFlags::DONT_FOLLOW);
+
+    /// Each directory directly in a directory, as it is now, never a link.
+    fn directories_in(directory: &Path) -> Vec<PathBuf> {
+        let Ok(entries) = std::fs::read_dir(directory) else { return Vec::new() };
+        entries.flatten().filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir())).map(|entry| entry.path()).collect()
+    }
+
+    /// A directory and every directory under it are watched; what they hold
+    /// is reported only when the directory is new.
+    fn watch(&mut self, directory: PathBuf, new: bool) -> io::Result<()> {
+        let flags = if directory == self.root.path {
+            Discovery::ROOTED
+        } else if std::fs::symlink_metadata(&directory).is_ok_and(|metadata| metadata.is_dir()) {
+            Discovery::WATCHED
+        } else {
+            return Ok(());
+        };
+        if let Ok(watch) = inotify::add_watch(&self.watching, &directory, flags) {
+            self.directories.insert(watch, directory.clone());
+        }
+        if new && let Ok(entries) = std::fs::read_dir(&directory) {
+            for entry in entries.flatten() {
+                if entry.file_type().is_ok_and(|kind| kind.is_file()) {
+                    self.report(entry.path())?;
+                }
+            }
+        }
+        for inner in Discovery::directories_in(&directory) {
+            self.watch(inner, new)?;
+        }
+        Ok(())
+    }
+
+    /// A session's rollout is reported once; a link, or what is not a rollout, never.
+    fn report(&mut self, path: PathBuf) -> io::Result<()> {
+        let Some(session_id) = rollout_session(&path) else { return Ok(()) };
+        if !std::fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_file()) || !self.reported.insert(path.clone()) {
+            return Ok(());
+        }
+        Discovered_Data { session_id, file_path: FilePath(path.to_string_lossy().into_owned()) }.write_to(&mut self.stream)
+    }
+
+    /// The root has come to exist: every directory in it is watched. What is
+    /// in a root that appeared after the discovery began is new, and reported;
+    /// what was there before is reported only when a live process holds it.
+    fn rooted(&mut self, appeared: bool) -> io::Result<()> {
+        let root = self.root.path.clone();
+        self.watch(root.clone(), appeared)?;
+        let Ok(canonical) = std::fs::canonicalize(&root) else { return Ok(()) };
+        for held in held_rollouts() {
+            if let Ok(inner) = held.strip_prefix(&canonical) {
+                self.report(root.join(inner))?;
+            }
+        }
+        Ok(())
+    }
+
+    /// What the watches have reported since the last read: each watch, what it
+    /// saw and the name it saw it on.
+    fn events(&self, buffer: &mut [MaybeUninit<u8>]) -> io::Result<Vec<(i32, inotify::ReadFlags, Option<std::ffi::OsString>)>> {
+        use std::os::unix::ffi::OsStrExt;
+        let mut reader = inotify::Reader::new(&self.watching, buffer);
+        let mut events = Vec::new();
+        loop {
+            let event = reader.next()?;
+            let name = event.file_name().map(|name| std::ffi::OsStr::from_bytes(name.to_bytes()).to_owned());
+            events.push((event.wd(), event.events(), name));
+            if reader.is_buffer_empty() {
+                return Ok(events);
+            }
+        }
+    }
+}
+
+/// A lasting emission: a Discovered for each session's rollout that appears
+/// under the root, at any depth, as Codex nests them by day, until the Nexus
+/// closes the connection. A directory that appears is new whole: each rollout
+/// in it is reported. A rollout that was there when the discovery began is
+/// reported only when a live process holds it open for writing, a session
+/// begun while no discovery ran. A root that does not exist yet is waited for,
+/// as a rollout is; what then appears in it is new.
+pub fn discover(stream: UnixStream, discover: Discover_Data) -> io::Result<()> {
+    let watching = inotify::init(inotify::CreateFlags::CLOEXEC)?;
+    let mut discovery = Discovery { stream, watching, root: Appearing::new(PathBuf::from(&discover.file_path.0)), directories: BTreeMap::new(), reported: BTreeSet::new() };
+    let mut rooted = discovery.root.watch(&discovery.watching, Discovery::ROOTED)?.is_some();
+    if rooted {
+        discovery.rooted(false)?;
+    }
+    let mut buffer = [MaybeUninit::<u8>::uninit(); 4096];
+    loop {
+        if closed(&discovery.watching, &discovery.stream)? {
+            return Ok(());
+        }
+        let events = discovery.events(&mut buffer)?;
+        if !rooted {
+            if discovery.root.watch(&discovery.watching, Discovery::ROOTED)?.is_some() {
+                rooted = true;
+                discovery.rooted(true)?;
+            }
+            continue;
+        }
+        for (watch, seen, name) in events {
+            if seen.contains(inotify::ReadFlags::IGNORED) {
+                discovery.directories.remove(&watch);
+                continue;
+            }
+            let (Some(name), Some(directory)) = (name, discovery.directories.get(&watch)) else { continue };
+            let path = directory.join(name);
+            if seen.contains(inotify::ReadFlags::ISDIR) {
+                discovery.watch(path, true)?;
+            } else {
+                discovery.report(path)?;
+            }
+        }
     }
 }
 

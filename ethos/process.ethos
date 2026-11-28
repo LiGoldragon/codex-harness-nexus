@@ -4,7 +4,8 @@ Process
   codex_harness:meta:[ Configure Configured ThreadDatabase ]
   codex_harness:memory:[ Watch Locate Observe Recall Keep ]
   codex_harness:[ RowCount ]
-  codex_harness:emission:[ Follow FindRollout ] ]
+  codex_harness:emission:[ Follow FindRollout Discover ]
+  harness:[ FilePath ] ]
 [ Report.{ []
            [ Reported Watch Observe Changed ]
            Reporting }
@@ -15,7 +16,11 @@ Process
               [ Recall Subscribed ] }
   Configure.{ []
               [ Keep Configured ]
-              Configuring } ]
+              Configuring }
+  Discover.{ [ FilePath ]
+             [ Discover Watch ]
+             Discovering } ]
 [ Reporting.[ Observed Unremembered ]
   Watching.[ Forgotten Unfollowed Unlocated ]
-  Configuring.[ Configured Unremembered ] ]
+  Configuring.[ Configured Unremembered ]
+  Discovering.[ Undiscovered Forgotten ] ]
