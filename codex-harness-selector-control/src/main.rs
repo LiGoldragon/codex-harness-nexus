@@ -172,13 +172,9 @@ impl Control {
             format!("{} {}", m.dev(), m.ino()).as_bytes(),
         )?;
         for stream in l.incoming() {
-            match stream {
-                Ok(s) => {
-                    if let Err(e) = self.reply(s) {
-                        eprintln!("control request: {e}");
-                    }
-                }
-                Err(e) => return Err(e),
+            let s = stream?;
+            if let Err(e) = self.reply(s) {
+                eprintln!("control request: {e}");
             }
         }
         Ok(())
