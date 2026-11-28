@@ -270,7 +270,7 @@ rec {
       };
       "codex-harness-nexus" = rec {
         crateName = "codex-harness-nexus";
-        version = "0.4.0";
+        version = "0.5.0";
         edition = "2024";
         crateBin = [
           {
@@ -308,6 +308,15 @@ rec {
             features = [ "alloc" "bytecheck" "little_endian" "pointer_width_32" "unaligned" ];
           }
           {
+            name = "rustix";
+            packageId = "rustix";
+            features = [ "net" "fs" "event" ];
+          }
+          {
+            name = "signal-harness";
+            packageId = "signal-harness";
+          }
+          {
             name = "transport";
             packageId = "transport";
           }
@@ -316,7 +325,7 @@ rec {
       };
       "codex-harness-process" = rec {
         crateName = "codex-harness-process";
-        version = "0.4.0";
+        version = "0.5.0";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./codex-harness-process; };
         libName = "codex_harness_process";
@@ -347,6 +356,10 @@ rec {
             packageId = "rkyv";
             usesDefaultFeatures = false;
             features = [ "alloc" "bytecheck" "little_endian" "pointer_width_32" "unaligned" ];
+          }
+          {
+            name = "signal-harness";
+            packageId = "signal-harness";
           }
         ];
         features = {
@@ -398,7 +411,7 @@ rec {
       };
       "codex-harness-translator" = rec {
         crateName = "codex-harness-translator";
-        version = "0.4.0";
+        version = "0.5.0";
         edition = "2024";
         crateBin = [
           {
@@ -414,6 +427,11 @@ rec {
           {
             name = "codex-harness-meta";
             path = "src/bin/codex-harness-meta.rs";
+            requiredFeatures = [ ];
+          }
+          {
+            name = "codex-harness-subscription";
+            path = "src/bin/codex-harness-subscription.rs";
             requiredFeatures = [ ];
           }
           {
@@ -468,6 +486,11 @@ rec {
           {
             name = "serde_json";
             packageId = "serde_json";
+          }
+          {
+            name = "signal-harness";
+            packageId = "signal-harness";
+            features = [ "datom" ];
           }
           {
             name = "transport";
@@ -1874,6 +1897,52 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "std" ];
       };
+      "signal-harness" = rec {
+        crateName = "signal-harness";
+        version = "0.2.0";
+        edition = "2024";
+        workspace_member = null;
+        src = pkgs.fetchgit {
+          url = "https://github.com/LiGoldragon/signal-harness";
+          rev = "f302b3088c719a3df1991b7701899dea7dce7288";
+          sha256 = "16rayxpsnjrl5w7kj1hl3bm1kcsbld66w17pg03lb8hp2lkwrqc6";
+        };
+        libName = "signal_harness";
+        dependencies = [
+          {
+            name = "datom-codec";
+            packageId = "datom-codec";
+            optional = true;
+          }
+          {
+            name = "flow-ethos";
+            packageId = "flow-ethos";
+            rename = "flow";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "harness-nexus-library";
+            packageId = "harness-nexus-library";
+            rename = "harness";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "protos";
+            packageId = "protos";
+            optional = true;
+          }
+          {
+            name = "rkyv";
+            packageId = "rkyv";
+            usesDefaultFeatures = false;
+            features = [ "std" "bytecheck" "little_endian" "pointer_width_32" "unaligned" ];
+          }
+        ];
+        features = {
+          "datom" = [ "dep:datom-codec" "dep:protos" "harness/datom" "flow/datom" ];
+        };
+        resolvedDefaultFeatures = [ "datom" "default" ];
+      };
       "simdutf8" = rec {
         crateName = "simdutf8";
         version = "0.1.5";
@@ -2029,7 +2098,7 @@ rec {
       };
       "transport" = rec {
         crateName = "transport";
-        version = "0.1.0";
+        version = "0.2.0";
         edition = "2024";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./transport; };
         dependencies = [

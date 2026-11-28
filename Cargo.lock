@@ -61,25 +61,28 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
 name = "codex-harness-nexus"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "codex-harness-process",
  "flow-ethos",
  "harness-nexus-library",
  "process-library",
  "rkyv",
+ "rustix",
+ "signal-harness",
  "transport",
 ]
 
 [[package]]
 name = "codex-harness-process"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "datom-codec",
  "flow-ethos",
  "harness-nexus-library",
  "process-library",
  "rkyv",
+ "signal-harness",
 ]
 
 [[package]]
@@ -95,7 +98,7 @@ dependencies = [
 
 [[package]]
 name = "codex-harness-translator"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "codex-harness-process",
  "datom-codec",
@@ -105,6 +108,7 @@ dependencies = [
  "rusqlite",
  "rustix",
  "serde_json",
+ "signal-harness",
  "transport",
 ]
 
@@ -220,7 +224,7 @@ dependencies = [
 [[package]]
 name = "harness-nexus-library"
 version = "0.3.0"
-source = "git+https://github.com/LiGoldragon/harness-nexus-library?rev=ae7e008#ae7e008700972b7f033de6ba94c36e6c49fc93f8"
+source = "git+https://github.com/LiGoldragon/harness-nexus-library?rev=ae7e008700972b7f033de6ba94c36e6c49fc93f8#ae7e008700972b7f033de6ba94c36e6c49fc93f8"
 dependencies = [
  "datom-codec",
  "flow-ethos",
@@ -541,6 +545,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
+name = "signal-harness"
+version = "0.2.0"
+source = "git+https://github.com/LiGoldragon/signal-harness?rev=f302b3088c719a3df1991b7701899dea7dce7288#f302b3088c719a3df1991b7701899dea7dce7288"
+dependencies = [
+ "datom-codec",
+ "flow-ethos",
+ "harness-nexus-library",
+ "protos",
+ "rkyv",
+]
+
+[[package]]
 name = "simdutf8"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -597,7 +613,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "transport"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "datom-codec",
  "protos",
