@@ -155,17 +155,16 @@ impl MemoryProcess {
 
     /// Applies each event and keeps the offset. What a Watch observes applies
     /// only while its Watch is kept. A session's start heard after its rollout
-    /// was discovered and read is no news: the rows observed came after it. A
-    /// session that has ended is forgotten, its Observed and its Watch, once
-    /// its changes are answered.
-    fn observe(&mut self, mut observe: Observe) -> Result<Observation, Unremembered> {
+    /// was discovered and read is still answered, with the state the rows read
+    /// have come to: those rows came after the start, so it does not return
+    /// the session to Dry. A session that has ended is forgotten, its Observed
+    /// and its Watch, once its changes are answered.
+    fn observe(&mut self, observe: Observe) -> Result<Observation, Unremembered> {
         if observe.offset_option.is_some() && !self.holds_watch(&observe.flow_id) {
             return Ok(Observation(Vec::new()));
         }
         let read = self.records.watch_vector.iter().any(|watch| watch.flow_id == observe.flow_id && matches!(watch.read_from, ReadFrom::Offset(Offset(offset)) if offset > 0));
-        if observe.offset_option.is_none() && read {
-            observe.event_vector.retain(|event| !matches!(event, Event::Started));
-        }
+        let heard_after_read = observe.offset_option.is_none() && read;
         let position = match self.records.observed_vector.iter().position(|observed| observed.flow_id == observe.flow_id) {
             Some(position) => position,
             None => {
@@ -178,7 +177,9 @@ impl MemoryProcess {
             .event_vector
             .into_iter()
             .map(|event| {
-                observed.after(event.clone());
+                if !(heard_after_read && matches!(event, Event::Started)) {
+                    observed.after(event.clone());
+                }
                 Changed { flow_id: observe.flow_id.clone(), event, state: observed.state.clone() }
             })
             .collect();
@@ -650,5 +651,55 @@ mod tests {
     fn a_configured_row_count_is_kept_with_or_without_a_rollout_root() {
         assert_eq!(records(Some(RowCount(64)), None).row_count(), Some(RowCount(64)));
         assert_eq!(records(Some(RowCount(64)), root()).row_count(), Some(RowCount(64)));
+    }
+
+    fn flow_id() -> FlowId {
+        FlowId("5bf476".into())
+    }
+
+    /// A memory kept in a file of its own, holding one Watch read from the offset given.
+    fn memory(name: &str, read_from: ReadFrom) -> MemoryProcess {
+        let mut records = records(None, root());
+        records.watch_vector.push(Watch { flow_id: flow_id(), session_id: harness::SessionId("019a0000-0000-7000-8000-000000000000".into()), rollout: Rollout::Unlocated, read_from });
+        MemoryProcess { records, file: std::env::temp_dir().join(format!("codex-harness-nexus-{}-{name}", std::process::id())) }
+    }
+
+    fn observe(memory: &mut MemoryProcess, event_vector: Vec<Event>, offset_option: Option<Offset>) -> Vec<Changed> {
+        let Ok(Observation(changed)) = memory.observe(Observe { flow_id: flow_id(), event_vector, offset_option }) else { panic!("the memory was not kept") };
+        changed
+    }
+
+    fn state(memory: &MemoryProcess) -> Option<State> {
+        memory.records.observed_vector.iter().find(|observed| observed.flow_id == flow_id()).map(|observed| observed.state.clone())
+    }
+
+    fn started(state: State) -> Vec<Changed> {
+        vec![Changed { flow_id: flow_id(), event: Event::Started, state }]
+    }
+
+    #[test]
+    fn a_start_heard_after_its_rows_were_read_is_answered_and_keeps_their_state() {
+        let mut memory = memory("late-start", ReadFrom::Offset(Offset(0)));
+        observe(&mut memory, vec![Event::PromptSubmitted], Some(Offset(480)));
+        assert_eq!(observe(&mut memory, vec![Event::Started], None), started(State::Flowing(harness::Flow::Working)));
+        assert_eq!(state(&memory), Some(State::Flowing(harness::Flow::Working)));
+        let _ = std::fs::remove_file(&memory.file);
+    }
+
+    #[test]
+    fn a_start_heard_after_only_the_session_row_was_read_is_answered() {
+        let mut memory = memory("session-row", ReadFrom::Offset(Offset(0)));
+        assert_eq!(observe(&mut memory, vec![], Some(Offset(120))), vec![]);
+        assert_eq!(observe(&mut memory, vec![Event::Started], None), started(State::Dry));
+        assert_eq!(state(&memory), Some(State::Dry));
+        let _ = std::fs::remove_file(&memory.file);
+    }
+
+    #[test]
+    fn a_start_heard_before_any_row_was_read_returns_the_session_to_dry() {
+        let mut memory = memory("cold-start", ReadFrom::Offset(Offset(0)));
+        assert_eq!(observe(&mut memory, vec![Event::Started], None), started(State::Dry));
+        assert_eq!(state(&memory), Some(State::Dry));
+        let _ = std::fs::remove_file(&memory.file);
     }
 }
