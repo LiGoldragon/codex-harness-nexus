@@ -1,13 +1,9 @@
 Signal
-[ harness:[ SessionId FilePath Trigger Event State Observed ]
-  flow:[ FlowId ] ]
+[ harness:[ SessionId FilePath Trigger ] ]
 [ Report.Hook
-  Subscribe
   Listening ]
 [ Reported
-  Subscribed.Vector<Observed>
-  Acknowledged
-  Changed.{ FlowId Event State } ]
+  Acknowledged ]
 [ Source.[ Startup
            Resume
            Compact ]

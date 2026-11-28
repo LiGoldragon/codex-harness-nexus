@@ -1,3 +1,5 @@
+//! The generated process root held here with signal-harness's `Changed` as a
+//! local record: ethos-zero resolves no imported names across crates.
 #![allow(
     dead_code,
     non_camel_case_types,
@@ -7,6 +9,15 @@
 )]
 #[rustfmt::skip]
 extern crate alloc;
+// The private process representation used by Memory and the signal-harness socket.
+#[rustfmt::skip]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
+pub struct Changed {
+    pub flow_id: flow::FlowId,
+    pub event: harness::Event,
+    pub state: harness::State,
+}
 #[rustfmt::skip]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "datom", derive(datom_codec::Datomizable, datom_codec::Composing))]
@@ -137,7 +148,7 @@ pub enum Gift {
     Reported,
     Watch(codex_harness::memory::Watch),
     Observe(codex_harness::memory::Observe),
-    Changed(codex_harness::signal::Changed_Data),
+    Changed(Changed),
     FindRollout(codex_harness::emission::FindRollout_Data),
     Locate(codex_harness::memory::Locate),
     Follow(codex_harness::emission::Follow_Data),
@@ -204,12 +215,12 @@ impl core::convert::From<codex_harness::memory::Observe> for Gift {
     }
 }
 #[rustfmt::skip]
-impl process::Givable for codex_harness::signal::Changed_Data {
+impl process::Givable for Changed {
     type Returned = ();
 }
 #[rustfmt::skip]
-impl core::convert::From<codex_harness::signal::Changed_Data> for Gift {
-    fn from(gift: codex_harness::signal::Changed_Data) -> Gift {
+impl core::convert::From<Changed> for Gift {
+    fn from(gift: Changed) -> Gift {
         Gift::Changed(gift)
     }
 }

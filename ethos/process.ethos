@@ -1,5 +1,6 @@
 Process
-[ codex_harness:signal:[ Report Subscribe Reported Subscribed Changed ]
+[ codex_harness:signal:[ Report Reported ]
+  signal_harness:[ Subscribe Subscribed Changed ]
   codex_harness:meta:[ Configure Configured ThreadDatabase ]
   codex_harness:memory:[ Watch Locate Observe Recall Keep ]
   codex_harness:[ RowCount ]

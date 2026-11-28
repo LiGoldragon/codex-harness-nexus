@@ -14,7 +14,7 @@ use std::thread;
 use codex_harness_process::*;
 use flow::FlowId;
 use harness::{Observed, State, Tokens, Transitionable};
-use process::{Answer, Arrival, Ended, Gave, Given, Identity, Living, Moment, Ownable, Owner, ProcessManager, Roots, Trace, Traced, Tracing, Unobserved, Unremembered};
+use process::{Answer, Arrival, Caller, Ended, Gave, Given, Identity, Living, Moment, Ownable, Owner, ProcessId, ProcessManager, Roots, Trace, Traced, Tracing, Unobserved, Unremembered, UserId};
 use transport::{Framed, Named, Place, Placed};
 
 struct CodexHarness;
@@ -147,7 +147,7 @@ impl MemoryProcess {
             .into_iter()
             .map(|event| {
                 observed.after(event.clone());
-                signal::Changed_Data { flow_id: observe.flow_id.clone(), event, state: observed.state.clone() }
+                signal_harness::Changed { flow_id: observe.flow_id.clone(), event, state: observed.state.clone() }
             })
             .collect();
         if observed.state == State::Ended {
@@ -167,7 +167,7 @@ impl MemoryProcess {
 
 /// A subscriber's connection holds what changed until its Subscribed is written.
 struct Subscription {
-    pending: Vec<Output>,
+    pending: Vec<signal_harness::Output>,
     answered: bool,
 }
 
@@ -183,6 +183,7 @@ struct SignalProcess {
 enum Called {
     Born(Process),
     Listening,
+    Rejected,
 }
 
 impl SignalProcess {
@@ -191,7 +192,7 @@ impl SignalProcess {
     fn listen<C, F>(place: &Place, placed: Placed, roots: Arc<Roots>, arrived: Arc<Mutex<BTreeMap<Identity, UnixStream>>>, queue: Queue, called: F) -> std::io::Result<()>
     where
         C: Framed + Send + 'static,
-        F: Fn(C) -> Called + Send + 'static,
+        F: Fn(C, &UnixStream) -> Called + Send + 'static,
     {
         let path = place.path::<CodexHarness>(placed);
         let _ = std::fs::remove_file(&path);
@@ -199,11 +200,12 @@ impl SignalProcess {
         thread::spawn(move || {
             for mut stream in listener.incoming().flatten() {
                 let Ok(Some(call)) = C::read_from(&mut stream) else { continue };
-                let arrival = match called(call) {
+                let arrival = match called(call, &stream) {
                     Called::Listening => {
                         let _ = Output::Acknowledged.write_to(&mut stream);
                         Arrived::Listening
                     }
+                    Called::Rejected => continue,
                     Called::Born(process) => {
                         let identity = roots.draw();
                         arrived.lock().expect("the arrived connections").insert(identity.clone(), stream);
@@ -220,12 +222,17 @@ impl SignalProcess {
 
     fn start(place: &Place, roots: Arc<Roots>, queue: Queue) -> std::io::Result<SignalProcess> {
         let arrived = Arc::new(Mutex::new(BTreeMap::new()));
-        SignalProcess::listen(place, Placed::NexusSocket, roots.clone(), arrived.clone(), queue.clone(), |call: Call| match call.input {
+        SignalProcess::listen(place, Placed::NexusSocket, roots.clone(), arrived.clone(), queue.clone(), |call: Call, _stream| match call.input {
             Input::Report(hook) => Called::Born(Process::Report(ReportProcess { caller: call.caller, hook })),
-            Input::Subscribe => Called::Born(Process::Subscribe(SubscribeProcess { caller: call.caller })),
             Input::Listening => Called::Listening,
         })?;
-        SignalProcess::listen(place, Placed::MetaSocket, roots, arrived.clone(), queue.clone(), |call: MetaCall| match call.meta_input {
+        SignalProcess::listen(place, Placed::SubscriptionSocket, roots.clone(), arrived.clone(), queue.clone(), |input: signal_harness::Input, stream| match input {
+            signal_harness::Input::Subscribe => match peer(stream) {
+                Some(caller) => Called::Born(Process::Subscribe(SubscribeProcess { caller })),
+                None => Called::Rejected,
+            },
+        })?;
+        SignalProcess::listen(place, Placed::MetaSocket, roots, arrived.clone(), queue.clone(), |call: MetaCall, _stream| match call.meta_input {
             meta::Input::Configure(set) => Called::Born(Process::Configure(ConfigureProcess { caller: call.caller, set })),
         })?;
         Ok(SignalProcess { arrived, connections: BTreeMap::new(), subscriptions: BTreeMap::new(), queue })
@@ -255,13 +262,20 @@ impl SignalProcess {
         }
     }
 
+    fn answer_subscription(&mut self, identity: &Identity, output: &signal_harness::Output) -> bool {
+        self.connections.get_mut(identity).is_some_and(|stream| output.write_to(stream).is_ok())
+    }
+
     /// From the moment its recollection is taken, a subscriber misses nothing.
     fn subscribe(&mut self, identity: &Identity) {
         self.subscriptions.insert(identity.clone(), Subscription { pending: Vec::new(), answered: false });
     }
 
-    fn subscribed(&mut self, identity: &Identity, output: Output) {
-        self.answer(identity, &output);
+    fn subscribed(&mut self, identity: &Identity, output: signal_harness::Output) {
+        if !self.answer_subscription(identity, &output) {
+            self.close(identity);
+            return;
+        }
         let pending = match self.subscriptions.get_mut(identity) {
             Some(subscription) => {
                 subscription.answered = true;
@@ -270,18 +284,27 @@ impl SignalProcess {
             None => Vec::new(),
         };
         for output in pending {
-            self.answer(identity, &output);
+            if !self.answer_subscription(identity, &output) {
+                self.close(identity);
+                break;
+            }
         }
     }
 
-    fn publish(&mut self, output: Output) {
+    fn publish(&mut self, output: signal_harness::Output) {
+        let mut failed = Vec::new();
         for (identity, subscription) in self.subscriptions.iter_mut() {
             match (subscription.answered, self.connections.get_mut(identity)) {
                 (true, Some(stream)) => {
-                    let _ = output.write_to(stream);
+                    if output.write_to(stream).is_err() {
+                        failed.push(identity.clone());
+                    }
                 }
                 _ => subscription.pending.push(output.clone()),
             }
+        }
+        for identity in failed {
+            self.close(&identity);
         }
     }
 
@@ -291,6 +314,12 @@ impl SignalProcess {
             let _ = stream.shutdown(std::net::Shutdown::Both);
         }
     }
+}
+
+/// A subscription has no in-band caller: its identity is its Unix peer.
+fn peer(stream: &UnixStream) -> Option<Caller> {
+    let credentials = rustix::net::sockopt::socket_peercred(stream).ok()?;
+    Some(Caller { process_id: ProcessId(credentials.pid.as_raw_nonzero().get().into()), user_id: UserId(credentials.uid.as_raw().into()) })
 }
 
 /// The emissions on their way to the translator, each on its own connection.
@@ -425,8 +454,8 @@ impl World {
     fn carry(&mut self, Gave { identity, gift }: Gave<Gift>) {
         match gift {
             Gift::Reported => self.signal.answer(&identity, &Output::Reported),
-            Gift::Subscribed(Subscribed(observed_vector)) => self.signal.subscribed(&identity, Output::Subscribed(observed_vector)),
-            Gift::Changed(changed) => self.signal.publish(Output::Changed(changed)),
+            Gift::Subscribed(Subscribed(observed_vector)) => self.signal.subscribed(&identity, signal_harness::Output::Subscribed(observed_vector)),
+            Gift::Changed(changed) => self.signal.publish(signal_harness::Output::Changed(changed)),
             Gift::Configured(Configured(set)) => self.signal.answer(&identity, &meta::Output::Configured(set)),
             Gift::Recall(Recall {}) => {
                 self.signal.subscribe(&identity);

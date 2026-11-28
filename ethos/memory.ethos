@@ -2,7 +2,7 @@ Memory
 [ harness:[ SessionId FilePath Event Observed ]
   flow:[ FlowId ]
   codex_harness:[ Offset ReadFrom ]
-  codex_harness:signal:[ Changed ]
+  codex_harness:processes:[ Changed ]
   codex_harness:meta:[ Set ] ]
 [ Watch.{ FlowId
           SessionId

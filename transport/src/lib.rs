@@ -43,6 +43,9 @@ pub enum Placed {
     MetaTextSocket,
     HookSocket,
     EmissionSocket,
+    /// The subscription every Harness Nexus serves from signal-harness.
+    SubscriptionSocket,
+    SubscriptionTextSocket,
     /// The memory, named for the version of the types it holds.
     Memory(&'static str),
     /// The trace, named for the version of the Nexus that wrote it.
@@ -58,6 +61,8 @@ impl Placed {
             Placed::MetaTextSocket => format!("{name}-meta-translator.sock"),
             Placed::HookSocket => format!("{name}-hook.sock"),
             Placed::EmissionSocket => format!("{name}-emission.sock"),
+            Placed::SubscriptionSocket => format!("{name}-subscription.sock"),
+            Placed::SubscriptionTextSocket => format!("{name}-subscription-translator.sock"),
             Placed::Memory(version) => format!("{name}-memory-{version}.signal"),
             Placed::Trace(version) => format!("{name}-trace-{version}.signal"),
         }
@@ -109,7 +114,14 @@ impl Place {
 
     pub fn path<N: Named>(&self, placed: Placed) -> PathBuf {
         let root = match placed {
-            Placed::NexusSocket | Placed::MetaSocket | Placed::TextSocket | Placed::MetaTextSocket | Placed::HookSocket | Placed::EmissionSocket => &self.runtime.0,
+            Placed::NexusSocket
+            | Placed::MetaSocket
+            | Placed::TextSocket
+            | Placed::MetaTextSocket
+            | Placed::HookSocket
+            | Placed::EmissionSocket
+            | Placed::SubscriptionSocket
+            | Placed::SubscriptionTextSocket => &self.runtime.0,
             Placed::Memory(_) | Placed::Trace(_) => &self.state.0,
         };
         PathBuf::from(root).join(placed.file_name(N::NAME))

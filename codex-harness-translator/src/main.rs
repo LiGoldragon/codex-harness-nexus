@@ -116,9 +116,15 @@ fn main() -> ExitCode {
         }
     };
     let listened = place.prepare().and_then(|()| {
-        Ok((listen(&place, Placed::TextSocket)?, listen(&place, Placed::MetaTextSocket)?, listen(&place, Placed::HookSocket)?, listen(&place, Placed::EmissionSocket)?))
+        Ok((
+            listen(&place, Placed::TextSocket)?,
+            listen(&place, Placed::MetaTextSocket)?,
+            listen(&place, Placed::SubscriptionTextSocket)?,
+            listen(&place, Placed::HookSocket)?,
+            listen(&place, Placed::EmissionSocket)?,
+        ))
     });
-    let (texts, meta_texts, hooks, emissions) = match listened {
+    let (texts, meta_texts, subscription_texts, hooks, emissions) = match listened {
         Ok(listeners) => listeners,
         Err(error) => {
             eprintln!("{error}");
@@ -144,6 +150,9 @@ fn main() -> ExitCode {
     serve_texts(texts, &place, |text, place| serve_text::<Input, Call, Output>(text, place, Placed::NexusSocket, |caller, input| Call { caller, input }));
     serve_texts(meta_texts, &place, |text, place| {
         serve_text::<meta::Input, MetaCall, meta::Output>(text, place, Placed::MetaSocket, |caller, meta_input| MetaCall { caller, meta_input })
+    });
+    serve_texts(subscription_texts, &place, |text, place| {
+        serve_text::<signal_harness::Input, signal_harness::Input, signal_harness::Output>(text, place, Placed::SubscriptionSocket, |_, input| input)
     });
     for stream in hooks.incoming().flatten() {
         report(stream, &place);
